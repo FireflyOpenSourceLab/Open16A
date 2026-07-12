@@ -20,6 +20,7 @@ ulong cycleRemainder    = 0;
 
 var machine = new Machine();
 var debugger = new DebuggerConsole(machine);
+var keyboard = new RayLibKeyboard(machine.Keyboard);
 var randomVram = new byte[VideoDevice.VIDEO_RAM_LENGTH];
 Random.Shared.NextBytes(randomVram);
 machine.Memory.CreatePhysicalView(Machine.VIDEO_RAM_ADDRESS, VideoDevice.VIDEO_RAM_LENGTH).CopyFrom(randomVram);
@@ -43,6 +44,10 @@ try
     while (!Raylib.WindowShouldClose())
     {
         debugger.UpdateInput();
+        if (debugger.IsOpen)
+            machine.Keyboard.Clear();
+        else
+            keyboard.Update();
 
         long now          = Stopwatch.GetTimestamp();
         long elapsedTicks = now - previousTimestamp;

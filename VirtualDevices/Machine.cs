@@ -4,6 +4,7 @@ public sealed class Machine
 {
     public const uint VIDEO_RAM_ADDRESS      = 0xF4000;
     public const byte VIDEO_INTERRUPT_VECTOR = 0x10;
+    public const byte KEYBOARD_INTERRUPT_VECTOR = 0x11;
 
     private readonly HashSet<uint> breakpoints = [];
     private bool skipCurrentBreakpoint;
@@ -22,6 +23,10 @@ public sealed class Machine
         Character = new CharacterDevice(
             Memory.CreatePhysicalView(VIDEO_RAM_ADDRESS, VideoDevice.VIDEO_RAM_LENGTH),
             Video);
+        Keyboard = new KeyboardDevice(
+            Interrupts,
+            KEYBOARD_INTERRUPT_VECTOR,
+            Memory.CreatePhysicalView(KeyboardDevice.STATE_ADDRESS, KeyboardDevice.STATE_LENGTH));
 
         Video.Attach(IoBus, presentPort: 0x20, statusPort: 0x21);
         Character.Attach(IoBus);
@@ -33,6 +38,7 @@ public sealed class Machine
     public InterruptController Interrupts { get; }
     public VideoDevice         Video      { get; }
     public CharacterDevice     Character  { get; }
+    public KeyboardDevice      Keyboard   { get; }
 
     public bool Paused { get; private set; }
 
@@ -95,6 +101,7 @@ public sealed class Machine
     public void Reset()
     {
         Cpu.Reset();
+        Keyboard.Clear();
         Paused = false;
         skipCurrentBreakpoint = false;
     }
