@@ -126,13 +126,15 @@ public sealed class DebuggerConsole : IDisposable
         {
             string result = parts[0].ToLowerInvariant() switch
             {
-                "help" => "Commands: regs, status, pause, run, step [n], mem <addr> [len], break <addr>, clear <addr>|all, breaks, set <reg> <value>, reset",
+                "help" => "Commands: regs, status, pause, run, step [n], mem <addr> [len], poke <addr> <byte>, fill <addr> <len> <byte>, break <addr>, clear <addr>|all, breaks, set <reg> <value>, reset",
                 "regs" => FormatRegisters(),
                 "status" => FormatStatus(),
                 "pause" => Pause(),
                 "run" or "continue" => Resume(),
                 "step" or "s" => Step(parts),
                 "mem" or "m" => DumpMemory(parts),
+                "poke" => PokeMemory(parts),
+                "fill" => FillMemory(parts),
                 "break" or "b" => AddBreakpoint(parts),
                 "clear" => ClearBreakpoint(parts),
                 "breaks" => ListBreakpoints(),
@@ -223,6 +225,34 @@ public sealed class DebuggerConsole : IDisposable
         foreach (string line in lines)
             WriteLine(line);
         return string.Empty;
+    }
+
+    private string PokeMemory(string[] parts)
+    {
+        if (parts.Length != 3)
+            throw new ArgumentException("Usage: poke <physical-address> <byte>");
+
+        uint address = ParseAddress(parts[1]);
+        byte value = ParseByte(parts[2]);
+        machine.Memory.WritePhysical(address, value);
+        return $"{address:X5} <- {value:X2}";
+    }
+
+    private string FillMemory(string[] parts)
+    {
+        if (parts.Length != 4)
+            throw new ArgumentException("Usage: fill <physical-address> <length> <byte>");
+
+        uint address = ParseAddress(parts[1]);
+        int length = ParseInt(parts[2]);
+        byte value = ParseByte(parts[3]);
+        if (length is < 1 or > 0x10000 || (ulong)address + (uint)length > Memory.INSTALLED_BYTES)
+            throw new ArgumentException("Fill range must be within physical RAM and at most 65536 bytes.");
+
+        for (var offset = 0; offset < length; offset++)
+            machine.Memory.WritePhysical(address + (uint)offset, value);
+
+        return $"Filled {length} byte(s) at {address:X5} with {value:X2}.";
     }
 
     private string AddBreakpoint(string[] parts)
@@ -388,6 +418,14 @@ public sealed class DebuggerConsole : IDisposable
         if (value.EndsWith("h", StringComparison.OrdinalIgnoreCase))
             return int.Parse(value[..^1], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture);
         return int.Parse(value, CultureInfo.InvariantCulture);
+    }
+
+    private static byte ParseByte(string value)
+    {
+        int parsed = ParseInt(value);
+        if (parsed is < byte.MinValue or > byte.MaxValue)
+            throw new ArgumentException("Byte value must be within 00-FF.");
+        return (byte)parsed;
     }
 
     private static uint ParseAddress(string value)

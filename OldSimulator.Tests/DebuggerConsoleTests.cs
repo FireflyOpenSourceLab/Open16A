@@ -79,6 +79,25 @@ public sealed class DebuggerConsoleTests
     }
 
     [Fact]
+    public void PokeAndFillWritePhysicalMemoryButRespectRomProtection()
+    {
+        byte[] rom = new byte[Memory.SYSTEM_ROM_LENGTH];
+        rom[0] = 0xA5;
+        var machine = new Machine(rom);
+        var console = new DebuggerConsole(machine);
+
+        Assert.Contains("F4000 <- FF", console.Execute("poke F4000 FF"));
+        Assert.Equal((byte)0xFF, machine.Memory.ReadPhysical(0xF4000));
+
+        Assert.Contains("Filled 4", console.Execute("fill F4010 4 7Eh"));
+        Assert.Equal((byte)0x7E, machine.Memory.ReadPhysical(0xF4010));
+        Assert.Equal((byte)0x7E, machine.Memory.ReadPhysical(0xF4013));
+
+        console.Execute("poke 00300 00");
+        Assert.Equal((byte)0xA5, machine.Memory.ReadPhysical(Memory.SYSTEM_ROM_START));
+    }
+
+    [Fact]
     public void ProtectedViewsRespectRomWrites()
     {
         byte[] rom = new byte[Memory.SYSTEM_ROM_LENGTH];
