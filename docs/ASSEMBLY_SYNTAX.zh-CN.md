@@ -2,7 +2,7 @@
 
 本文描述 `Open16A-ASM` **当前实际接受**的源文件语法。指令的运行语义、编码和设备端口见[指令集手册](INSTRUCTION_SET.zh-CN.md)与[系统设备手册](SYSTEM_DEVICES.zh-CN.md)。
 
-汇编器输出 raw `.bin`；每个 16-bit 字按 big-endian 写入：`1234h` 写作两个字节 `12h 34h`。
+汇编器默认输出 raw `.bin`；使用 `-c` 则输出供 `Open16A-LD` 链接的可重定位 `.o16o`。每个 16-bit 字按 big-endian 写入：`1234h` 写作两个字节 `12h 34h`。
 
 ## 1. 一行源代码
 
@@ -261,6 +261,24 @@ entry:
 ```
 
 上例在 `.bin` 中依次输出 `12 34 FF FF` 和 `entry` 地址的高字节、低字节。
+
+### `.global symbol, ...` 与 `.extern symbol, ...`
+
+这两条指令只在 `open16a-asm -c` 的可重定位对象模式下有意义。`.global` 把当前文件已定义的标签导出，`.extern` 声明由另一个对象模块导出的标签：
+
+```asm
+; main.asm
+.global main
+.extern puts
+
+main:
+    CALLA puts
+    HALT
+```
+
+对象模式只能省略 `.org` 或写 `.org 0`，因为最终物理基址由链接器的 `--base` 决定。`.global` 与 `.extern` 都至少需要一个名字；同一名字不能既是外部符号又在当前模块定义或导出。
+
+可以重定位的符号表达式限定为 `symbol`、`symbol + constant`、`symbol - constant`。这些表达式可用于 `.word`、`LI`、短内存位移、短/长控制目标、长内存地址以及外部条件分支。短内存位移的符号必须写为 `[Ra + symbol]`，不支持 `[Ra - symbol]`。内部条件分支的相对位移与模块基址无关，因此不会产生链接器回填。
 
 ## 6. 完整例子
 

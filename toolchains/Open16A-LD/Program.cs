@@ -1,8 +1,10 @@
 using Open16A.Ld;
+using Open16A.Asm;
+using System.Text.Json;
 
 if (args.Length == 0 || args[0] is "-h" or "--help")
 {
-    Console.WriteLine("Usage: open16a-ld <file.bin>@<physical-address> ... -o <output.bin> [--base <physical-address>] [--map <output.map>]");
+    Console.WriteLine("Usage: open16a-ld <file.bin>@<physical-address> ... -o <output.bin> [--base <physical-address>] [--map <output.map>]\n       open16a-ld <module.o16o> ... -o <output.bin> --base <physical-address> [--map <output.map>]");
     return;
 }
 
@@ -27,7 +29,9 @@ try
                 map = args[++index];
                 break;
             default:
-                inputs.Add(Linker.ParseInput(args[index]));
+                inputs.Add(args[index].EndsWith(".o16o", StringComparison.OrdinalIgnoreCase)
+                    ? new LinkInput(args[index], 0)
+                    : Linker.ParseInput(args[index]));
                 break;
         }
     }
@@ -35,7 +39,16 @@ try
     if (output is null)
         throw new LinkException("Missing required -o <output.bin>.");
 
-    LinkResult result = new Linker().Link(inputs, baseAddress);
+    var linker = new Linker();
+    bool objectMode = inputs.Count != 0 && inputs.All(input => Path.GetExtension(input.Path).Equals(".o16o", StringComparison.OrdinalIgnoreCase));
+    if (inputs.Any(input => Path.GetExtension(input.Path).Equals(".o16o", StringComparison.OrdinalIgnoreCase)) && !objectMode)
+        throw new LinkException("Raw binaries and .o16o objects cannot be mixed in one link.");
+    if (objectMode && baseAddress is null)
+        throw new LinkException("Relocatable object links require --base <physical-address>.");
+
+    LinkResult result = objectMode
+        ? linker.LinkObjects(inputs.Select(input => JsonSerializer.Deserialize<ObjectModule>(File.ReadAllText(input.Path)) ?? throw new LinkException($"Invalid object module '{input.Path}'.")), baseAddress!.Value)
+        : linker.Link(inputs, baseAddress);
     File.WriteAllBytes(output, result.Bytes);
     if (map is not null)
     {
@@ -45,7 +58,7 @@ try
     }
     Console.WriteLine($"Linked {result.Entries.Count} module(s), {result.Bytes.Length} byte(s), origin {result.Origin:X5}h -> {output}");
 }
-catch (Exception exception) when (exception is LinkException or IOException or UnauthorizedAccessException)
+catch (Exception exception) when (exception is LinkException or IOException or UnauthorizedAccessException or JsonException)
 {
     Console.Error.WriteLine(exception.Message);
     Environment.ExitCode = 1;

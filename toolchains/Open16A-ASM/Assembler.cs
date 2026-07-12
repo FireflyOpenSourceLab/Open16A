@@ -18,8 +18,45 @@ public sealed class AssemblyException : Exception
 public sealed class Assembler
 {
     private readonly Dictionary<string, uint> labels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> externalSymbols = new(StringComparer.OrdinalIgnoreCase);
+    private bool relocatable;
 
-    public AssemblyResult Assemble(string source)
+    public AssemblyResult Assemble(string source) => AssembleCore(source, false);
+
+    public ObjectModule AssembleObject(string source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        List<Line> lines = Parse(source);
+        HashSet<string> exports = CollectDirectiveNames(lines, ".GLOBAL");
+        externalSymbols.Clear();
+        foreach (string name in CollectDirectiveNames(lines, ".EXTERN"))
+            externalSymbols.Add(name);
+
+        try
+        {
+            relocatable = true;
+            AssemblyResult result = AssembleCore(source, true);
+            if (exports.Overlaps(externalSymbols))
+                throw new AssemblyException(1, "A symbol cannot be both .global and .extern.");
+            if (externalSymbols.Any(labels.ContainsKey))
+                throw new AssemblyException(1, "An .extern symbol cannot be defined in the same object module.");
+            foreach (string name in exports)
+            {
+                if (!labels.ContainsKey(name))
+                    throw new AssemblyException(1, $"Exported symbol '{name}' is not defined.");
+            }
+
+            var symbols = labels.Select(pair => new ObjectSymbol(pair.Key, checked((int)pair.Value), exports.Contains(pair.Key))).ToArray();
+            return new ObjectModule(result.Bytes, symbols, CollectRelocations(lines));
+        }
+        finally
+        {
+            relocatable = false;
+            externalSymbols.Clear();
+        }
+    }
+
+    private AssemblyResult AssembleCore(string source, bool objectMode)
     {
         ArgumentNullException.ThrowIfNull(source);
         labels.Clear();
@@ -39,7 +76,10 @@ public sealed class Assembler
             {
                 if (hasOutput)
                     throw Error(line, ".org must appear before output.");
-                address = origin = Physical(Value(Arguments(line), 0, line), line);
+                uint requestedOrigin = Physical(Value(Arguments(line), 0, line), line);
+                if (objectMode && requestedOrigin != 0)
+                    throw Error(line, ".org is not allowed in relocatable objects; use .org 0 or omit it.");
+                address = origin = requestedOrigin;
                 continue;
             }
 
@@ -54,13 +94,33 @@ public sealed class Assembler
         address = origin;
         foreach (Line line in lines)
         {
-            if (line.Body is null || Mnemonic(line.Body) == ".ORG")
+            if (line.Body is null || Mnemonic(line.Body) is ".ORG" or ".GLOBAL" or ".EXTERN")
                 continue;
             Emit(line, address, bytes);
             address = origin + (uint)bytes.Count;
         }
 
         return new AssemblyResult(origin, [.. bytes]);
+    }
+
+    private static HashSet<string> CollectDirectiveNames(IEnumerable<Line> lines, string directive)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Line line in lines)
+        {
+            if (line.Body is null || Mnemonic(line.Body) != directive)
+                continue;
+            List<string> directiveNames = Arguments(line);
+            if (directiveNames.Count == 0)
+                throw Error(line, $"{directive.ToLowerInvariant()} requires at least one symbol.");
+            foreach (string name in directiveNames)
+            {
+                if (!Identifier(name))
+                    throw Error(line, $"Invalid symbol '{name}'.");
+                names.Add(name);
+            }
+        }
+        return names;
     }
 
     private List<Line> Parse(string source)
@@ -94,6 +154,7 @@ public sealed class Assembler
         {
             ".BYTE" => operands.Count,
             ".WORD" => checked(operands.Count * 2),
+            ".GLOBAL" or ".EXTERN" => 0,
             "NOP" or "MOV" or "ADD" or "SUB" or "AND" or "OR" or "XOR" or "SHL" or "SHR" or "SAR"
                 or "JMP" or "CALL" or "RET" or "PUSH" or "POP" or "RDSG" or "WRSG" or "EI" or "DI"
                 or "HALT" or "IRET" or "RETL" => 2,
@@ -313,6 +374,102 @@ public sealed class Assembler
         return unchecked((ushort)(short)(delta / 2));
     }
 
+    private IReadOnlyList<ObjectRelocation> CollectRelocations(IEnumerable<Line> lines)
+    {
+        var relocations = new List<ObjectRelocation>();
+        uint address = 0;
+        foreach (Line line in lines)
+        {
+            if (line.Body is null)
+                continue;
+            string mnemonic = Mnemonic(line.Body);
+            if (mnemonic is ".ORG" or ".GLOBAL" or ".EXTERN")
+                continue;
+            List<string> operands = Arguments(line);
+
+            switch (mnemonic)
+            {
+                case ".WORD":
+                    for (var index = 0; index < operands.Count; index++)
+                        AddRelocation(relocations, operands[index], checked((int)address + index * 2), RelocationKind.Absolute16, line);
+                    break;
+                case "LI" or "IN":
+                    AddRelocation(relocations, Operand(operands, 1, line), checked((int)address + 2), RelocationKind.Absolute16, line);
+                    break;
+                case "LD.BU" or "LD.W" or "ST.B" or "ST.W":
+                    AddMemoryDisplacementRelocation(relocations, Operand(operands, 1, line), checked((int)address + 2), line);
+                    break;
+                case "OUT" or "WSGI" or "JMPA" or "CALLA":
+                    AddRelocation(relocations, Operand(operands, 0, line), checked((int)address + 2), RelocationKind.Absolute16, line);
+                    break;
+                case "BEQ" or "BNE":
+                    AddRelocation(relocations, Operand(operands, 2, line), checked((int)address + 2), RelocationKind.Relative16, line, externalOnly: true);
+                    break;
+                case "BLT" or "BGE" or "BLO" or "BHS" or "BLE" or "BGT":
+                    AddRelocation(relocations, Operand(operands, 2, line), checked((int)address + 4), RelocationKind.Relative16, line, externalOnly: true);
+                    break;
+                case "JMPL" or "CALLL":
+                    AddRelocation(relocations, Operand(operands, 0, line), checked((int)address + 2), RelocationKind.Absolute20, line);
+                    break;
+                case "LDBS" or "LDBU" or "LDW" or "LSTB" or "LSTW":
+                    AddRelocation(relocations, StripBrackets(Operand(operands, 1, line)), checked((int)address + 4), RelocationKind.Absolute20, line);
+                    break;
+                case "FLD" or "FST":
+                    AddMemoryDisplacementRelocation(relocations, Operand(operands, 1, line), checked((int)address + 4), line);
+                    break;
+            }
+
+            address += (uint)Length(line);
+        }
+        return relocations;
+    }
+
+    private void AddMemoryDisplacementRelocation(List<ObjectRelocation> relocations, string operand, int offset, Line line)
+    {
+        string value = operand.Trim();
+        if (value.StartsWith('[') && value.EndsWith(']'))
+            value = value[1..^1].Trim();
+        int operation = AddSubtract(value);
+        if (operation < 0)
+            return;
+        if (value[operation] == '-' && TrySymbolExpression(value[(operation + 1)..], out _, out _))
+            throw Error(line, "Relocatable memory displacements must use [Ra + symbol], not [Ra - symbol].");
+        AddRelocation(relocations, value[(operation + 1)..], offset, RelocationKind.Absolute16, line);
+    }
+
+    private void AddRelocation(List<ObjectRelocation> relocations, string expression, int offset, RelocationKind kind, Line line, bool externalOnly = false)
+    {
+        if (!TrySymbolExpression(expression, out string? symbol, out int addend))
+            return;
+        string symbolName = symbol!;
+        bool local = labels.ContainsKey(symbolName);
+        if (!local && !externalSymbols.Contains(symbolName))
+            return;
+        if (externalOnly && local)
+            return;
+        relocations.Add(new ObjectRelocation(offset, kind, symbolName, addend, local));
+    }
+
+    private bool TrySymbolExpression(string expression, out string? symbol, out int addend)
+    {
+        expression = expression.Trim();
+        int operation = AddSubtract(expression);
+        string candidate = operation > 0 ? expression[..operation].Trim() : expression;
+        symbol = labels.Keys.Concat(externalSymbols).FirstOrDefault(name => string.Equals(name, candidate, StringComparison.OrdinalIgnoreCase));
+        addend = 0;
+        if (symbol is null)
+            return false;
+        if (operation > 0)
+            addend = checked((int)Resolve(expression[(operation + 1)..], new Line(0, null, expression)) * (expression[operation] == '-' ? -1 : 1));
+        return true;
+    }
+
+    private static string StripBrackets(string value)
+    {
+        value = value.Trim();
+        return value.StartsWith('[') && value.EndsWith(']') ? value[1..^1].Trim() : value;
+    }
+
     private long Value(List<string> operands, int index, Line line) => Resolve(Operand(operands, index, line), line);
 
     private long Resolve(string text, Line line)
@@ -330,6 +487,7 @@ public sealed class Assembler
         if (text.EndsWith("h", StringComparison.OrdinalIgnoreCase)) return Parse(text[..^1], NumberStyles.AllowHexSpecifier, line);
         if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long decimalValue)) return decimalValue;
         if (labels.TryGetValue(text, out uint label)) return label;
+        if (relocatable && externalSymbols.Contains(text)) return 0;
         throw Error(line, $"Unknown symbol or invalid value '{text}'.");
     }
 

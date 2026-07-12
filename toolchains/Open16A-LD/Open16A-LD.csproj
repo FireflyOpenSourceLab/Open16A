@@ -6,4 +6,7 @@
     <Nullable>enable</Nullable>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Open16A-ASM\Open16A-ASM.csproj" />
+  </ItemGroup>
 </Project>
