@@ -63,15 +63,10 @@ function findServerPath(): string | undefined {
     const candidates = [
         configured,
         process.env.OPEN16A_LSP_PATH,
-        ...vscode.workspace.workspaceFolders?.map(folder => path.join(
-            folder.uri.fsPath,
-            "toolchains",
-            "Open16A-LSP",
-            "bin",
-            "Debug",
-            "net10.0",
-            "Open16A-LSP.dll"
-        )) ?? []
+        ...vscode.workspace.workspaceFolders?.flatMap(folder => [
+            path.join(folder.uri.fsPath, "Open16A-LSP.dll"),
+            path.join(folder.uri.fsPath, "toolchains", "Open16A-LSP", "bin", "Debug", "net10.0", "Open16A-LSP.dll")
+        ]) ?? []
     ];
     return candidates.find(candidate => candidate && fs.existsSync(candidate));
 }

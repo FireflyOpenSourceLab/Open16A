@@ -21,7 +21,8 @@ npm run package
 
 1. `open16a.languageServer.path` 设置。
 2. 环境变量 `OPEN16A_LSP_PATH`。
-3. 当前工作区下的 `toolchains/Open16A-LSP/bin/Debug/net10.0/Open16A-LSP.dll`。
+3. 当前工作区根目录的 `Open16A-LSP.dll`。
+4. 当前工作区下的 `toolchains/Open16A-LSP/bin/Debug/net10.0/Open16A-LSP.dll`。
 
 默认服务器以 `dotnet <Open16A-LSP.dll>` 启动。`open16a.languageServer.dotnetPath` 可改为 `dotnet` 的绝对路径。
 
