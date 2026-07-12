@@ -219,6 +219,14 @@ public static class BasicTokenizer
                 throw Error(sourceLine, "Exponent requires decimal digits.");
         }
         string literal = text[start..index];
+        if (!literal.ContainsAny('.', 'e', 'E')
+            && short.TryParse(literal, NumberStyles.Integer, CultureInfo.InvariantCulture, out short integerValue))
+        {
+            tokens.Add(BasicProgramFormat.IntegerLiteral);
+            tokens.Add((byte)((ushort)integerValue >> 8));
+            tokens.Add((byte)integerValue);
+            return;
+        }
         if (!float.TryParse(literal, NumberStyles.Float, CultureInfo.InvariantCulture, out float value) || float.IsInfinity(value) || float.IsNaN(value))
             throw Error(sourceLine, $"Invalid finite FP32 literal '{literal}'.");
         uint bits = BitConverter.SingleToUInt32Bits(value);

@@ -10,6 +10,8 @@ entry:
     li r0, keyboard_interrupt
     li r1, 0032h
     st.w r0, [r1]
+    li r1, 0030h
+    st.w r0, [r1]
     ei
     li r1, banner_text
     calla puts
@@ -154,7 +156,7 @@ autorun_done:
     ret
 
 ; Interpret the program header at 4000h. Current statement dispatcher supports
-; PRINT followed by a string literal and END; unknown statements report an error.
+; the integer BASIC subset: LET A%=n, PRINT string/int/A%, CLS, REM and END.
 run_program:
     li r1, 4000h
     ld.bu r0, [r1]
@@ -186,7 +188,15 @@ run_token:
     add r1, r1, r3
     li r3, 0091h
     beq r0, r3, run_print
+    li r3, 0090h
+    beq r0, r3, run_let
+    li r3, 00a0h
+    beq r0, r3, run_cls
+    li r3, 009ch
+    beq r0, r3, run_rem
     li r3, 009dh
+    beq r0, r3, run_done
+    li r3, 009eh
     beq r0, r3, run_done
     li r1, syntax_text
     calla puts
@@ -196,7 +206,13 @@ run_print:
     li r3, 1
     add r1, r1, r3
     li r3, 0083h
-    bne r0, r3, run_syntax
+    beq r0, r3, print_string_begin
+    li r3, 0082h
+    beq r0, r3, print_integer_literal
+    li r3, 0084h
+    beq r0, r3, print_integer_variable
+    jmpa run_syntax
+print_string_begin:
     ld.bu r5, [r1]
     li r3, 1
     add r1, r1, r3
@@ -214,6 +230,68 @@ print_newline:
     li r0, 000ah
     calla putc
     jmpa run_token
+print_integer_literal:
+    ld.w r0, [r1]
+    li r3, 2
+    add r1, r1, r3
+    calla print_integer
+    jmpa print_newline
+print_integer_variable:
+    ld.bu r5, [r1]
+    li r3, 1
+    add r1, r1, r3
+    li r3, 0040h
+    and r3, r3, r5
+    li r6, 0040h
+    bne r3, r6, run_syntax
+    li r6, 001fh
+    and r5, r5, r6
+    add r5, r5, r5
+    li r6, integer_vars
+    add r6, r6, r5
+    ld.w r0, [r6]
+    calla print_integer
+    jmpa print_newline
+
+run_let:
+    ld.bu r0, [r1]
+    li r3, 1
+    add r1, r1, r3
+    li r3, 0084h
+    bne r0, r3, run_syntax
+    mov r5, r0
+    ld.bu r0, [r1]
+    li r3, 1
+    add r1, r1, r3
+    li r3, 003dh
+    bne r0, r3, run_syntax
+    ld.bu r0, [r1]
+    li r3, 1
+    add r1, r1, r3
+    li r3, 0082h
+    bne r0, r3, run_syntax
+    ld.w r0, [r1]
+    li r3, 2
+    add r1, r1, r3
+    li r3, 0040h
+    and r3, r3, r5
+    li r6, 0040h
+    bne r3, r6, run_syntax
+    li r6, 001fh
+    and r5, r5, r6
+    add r5, r5, r5
+    li r6, integer_vars
+    add r6, r6, r5
+    st.w r0, [r6]
+    jmpa run_token
+
+run_cls:
+    li r0, 0
+    out 0037h, r0
+    jmpa run_token
+run_rem:
+    mov r1, r4
+    jmpa run_line
 run_syntax:
     li r1, syntax_text
     calla puts
@@ -225,6 +303,49 @@ run_done:
 no_program:
     li r1, no_program_text
     calla puts
+    ret
+
+; Prints signed R0 as decimal while preserving the token cursor in R1/R2/R4.
+print_integer:
+    push r1
+    push r2
+    push r3
+    push r4
+    push r5
+    li r1, 0
+    bge r0, r1, print_integer_positive
+    mov r5, r0
+    li r0, 002dh
+    calla putc
+    neg r0, r5
+print_integer_positive:
+    li r2, 10
+    li r3, 0
+print_integer_divide:
+    divu r4, r0, r2
+    modu r5, r0, r2
+    push r5
+    li r1, 1
+    add r3, r3, r1
+    mov r0, r4
+    li r1, 0
+    bne r0, r1, print_integer_divide
+print_integer_emit:
+    li r1, 0
+    beq r3, r1, print_integer_done
+    pop r5
+    li r1, 0030h
+    add r0, r5, r1
+    calla putc
+    li r1, 1
+    sub r3, r3, r1
+    jmpa print_integer_emit
+print_integer_done:
+    pop r5
+    pop r4
+    pop r3
+    pop r2
+    pop r1
     ret
 
 putc:
@@ -257,6 +378,9 @@ input_length:
     .byte 0
 input_buffer:
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+integer_vars:
+    .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    .word 0,0,0,0,0,0,0,0,0,0
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
