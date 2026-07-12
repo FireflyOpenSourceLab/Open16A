@@ -58,14 +58,14 @@ public sealed class Memory
     public ushort ReadPhysicalWord(uint addr)
     {
         ensurePhysicalRange(addr, sizeof(ushort));
-        return (ushort)(ReadPhysical(addr) | (ReadPhysical(addr + 1) << 8));
+        return (ushort)((ReadPhysical(addr) << 8) | ReadPhysical(addr + 1));
     }
 
     public void WritePhysicalWord(uint addr, ushort content)
     {
         ensurePhysicalRange(addr, sizeof(ushort));
-        WritePhysical(addr,     (byte)content);
-        WritePhysical(addr + 1, (byte)(content >> 8));
+        WritePhysical(addr,     (byte)(content >> 8));
+        WritePhysical(addr + 1, (byte)content);
     }
 
     public ReadOnlyMemory<byte> GetPhysicalReadOnlyView(uint addr, int length)
@@ -100,14 +100,14 @@ public sealed class Memory
     public ushort ReadLogicalWord(ushort addr, byte sg)
     {
         ushort next = unchecked((ushort)(addr + 1));
-        return (ushort)(ReadLogical(addr, sg) | (ReadLogical(next, sg) << 8));
+        return (ushort)((ReadLogical(addr, sg) << 8) | ReadLogical(next, sg));
     }
 
     public void WriteLogicalWord(ushort addr, byte sg, ushort content)
     {
         ushort next = unchecked((ushort)(addr + 1));
-        WriteLogical(addr, sg, (byte)content);
-        WriteLogical(next, sg, (byte)(content >> 8));
+        WriteLogical(addr, sg, (byte)(content >> 8));
+        WriteLogical(next, sg, (byte)content);
     }
 
     private bool isSystemRomAddress(uint addr)

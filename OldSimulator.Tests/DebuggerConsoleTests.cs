@@ -116,7 +116,7 @@ public sealed class DebuggerConsoleTests
     public void LoadCopiesBinaryToPhysicalMemoryAndConfiguresAHighPageEntryPoint()
     {
         string path = Path.Combine(Path.GetTempPath(), $"open16a loader {Guid.NewGuid():N}.bin");
-        File.WriteAllBytes(path, [0x00, 0xE8]); // HALT, little-endian
+        File.WriteAllBytes(path, [0xE8, 0x00]); // HALT, big-endian
 
         try
         {
@@ -129,8 +129,8 @@ public sealed class DebuggerConsoleTests
             Assert.Equal((ushort)0, machine.Cpu.Registers[0]);
             Assert.Equal((byte)8, machine.Cpu.SG);
             Assert.Equal((ushort)0xF456, machine.Cpu.PC);
-            Assert.Equal((byte)0x00, machine.Memory.ReadPhysical(0x23456));
-            Assert.Equal((byte)0xE8, machine.Memory.ReadPhysical(0x23457));
+            Assert.Equal((byte)0xE8, machine.Memory.ReadPhysical(0x23456));
+            Assert.Equal((byte)0x00, machine.Memory.ReadPhysical(0x23457));
 
             console.Execute("run");
             machine.AdvanceCycles(1);
@@ -146,7 +146,7 @@ public sealed class DebuggerConsoleTests
     public void LoadRunStartsImmediatelyAndRefusesToOverwriteSystemRom()
     {
         string path = Path.Combine(Path.GetTempPath(), $"open16a-loader-{Guid.NewGuid():N}.bin");
-        File.WriteAllBytes(path, [0x00, 0xE8]);
+        File.WriteAllBytes(path, [0xE8, 0x00]);
 
         try
         {

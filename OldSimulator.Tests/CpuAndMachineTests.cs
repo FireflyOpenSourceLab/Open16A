@@ -6,7 +6,7 @@ namespace OldSimulator.Tests;
 public sealed class CpuAndMachineTests
 {
     [Fact]
-    public void ExecutesArithmeticBranchesWordsAndIoInLittleEndianOrder()
+    public void ExecutesArithmeticBranchesWordsAndIoInBigEndianOrder()
     {
         var    memory  = new Memory();
         var    bus     = new IoBus();
@@ -61,8 +61,8 @@ public sealed class CpuAndMachineTests
         Assert.Equal((ushort)0xCAFE,            cpu.Registers[5]);
         Assert.Equal((ushort)1,                 cpu.SG);
         Assert.Equal(Cpu.INITIAL_STACK_POINTER, cpu.SP);
-        Assert.Equal((byte)0xEF,                memory.ReadPhysical(0x4000));
-        Assert.Equal((byte)0xBE,                memory.ReadPhysical(0x4001));
+        Assert.Equal((byte)0xBE,                memory.ReadPhysical(0x4000));
+        Assert.Equal((byte)0xEF,                memory.ReadPhysical(0x4001));
     }
 
     [Fact]
@@ -103,6 +103,22 @@ public sealed class CpuAndMachineTests
         Assert.Equal((byte)0xA5, memory.ReadPhysical(Memory.SYSTEM_ROM_START));
         Assert.Equal((byte)0xA5, memory.ReadLogical(Memory.SYSTEM_ROM_START, 0));
         Assert.Equal((byte)0xA5, memory.CreatePhysicalView(Memory.SYSTEM_ROM_START, 1).Read(0));
+    }
+
+    [Fact]
+    public void WordsAreStoredBigEndianInPhysicalAndLogicalMemory()
+    {
+        var memory = new Memory();
+
+        memory.WritePhysicalWord(0x12345, 0xBEEF);
+        memory.WriteLogicalWord(0xC000, 3, 0xCAFE);
+
+        Assert.Equal((byte)0xBE, memory.ReadPhysical(0x12345));
+        Assert.Equal((byte)0xEF, memory.ReadPhysical(0x12346));
+        Assert.Equal((ushort)0xBEEF, memory.ReadPhysicalWord(0x12345));
+        Assert.Equal((byte)0xCA, memory.ReadPhysical(0xC000));
+        Assert.Equal((byte)0xFE, memory.ReadPhysical(0xC001));
+        Assert.Equal((ushort)0xCAFE, memory.ReadLogicalWord(0xC000, 3));
     }
 
     [Fact]
