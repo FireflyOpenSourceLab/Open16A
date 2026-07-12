@@ -2,21 +2,89 @@
 
 public sealed class Memory
 {
-    public readonly int    InstalledBytes = 1 << 20;
-    public readonly byte[] Data           = new byte[1 << 20];
+    public const int    INSTALLED_BYTES   = 1 << 20;
+    public const ushort SYSTEM_ROM_START  = 0x0300;
+    public const int    SYSTEM_ROM_LENGTH = 0x1000;
+
+    private readonly byte[] data = new byte[INSTALLED_BYTES];
+
+    private bool systemRomLoaded;
+
+    public Memory()
+    {
+    }
+
+    public Memory(byte[] systemRom)
+    {
+        ArgumentNullException.ThrowIfNull(systemRom);
+        LoadSystemRom(systemRom);
+    }
+
+    public bool HasSystemRom => systemRomLoaded;
+
+    public ReadOnlyMemory<byte> Data => data;
+
+    public void LoadSystemRom(ReadOnlySpan<byte> systemRom)
+    {
+        if (systemRom.Length != SYSTEM_ROM_LENGTH)
+        {
+            throw new ArgumentException(
+                $"System ROM must be exactly {SYSTEM_ROM_LENGTH} bytes.",
+                nameof(systemRom));
+        }
+
+        systemRom.CopyTo(data.AsSpan(SYSTEM_ROM_START, SYSTEM_ROM_LENGTH));
+        systemRomLoaded = true;
+    }
 
     public byte ReadPhysical(uint addr)
     {
-        if (addr >= InstalledBytes)
+        if (addr >= INSTALLED_BYTES)
             throw new ArgumentOutOfRangeException(nameof(addr), "Memory Address Read Out of Range");
-        return Data[addr];
+        return data[addr];
     }
 
     public void WritePhysical(uint addr, byte content)
     {
-        if (addr >= InstalledBytes)
+        if (addr >= INSTALLED_BYTES)
             throw new ArgumentOutOfRangeException(nameof(addr), "Memory Address Write Out of Range");
-        Data[addr] = content;
+
+        if (isSystemRomAddress(addr))
+            return;
+
+        data[addr] = content;
+    }
+
+    public ushort ReadPhysicalWord(uint addr)
+    {
+        ensurePhysicalRange(addr, sizeof(ushort));
+        return (ushort)(ReadPhysical(addr) | (ReadPhysical(addr + 1) << 8));
+    }
+
+    public void WritePhysicalWord(uint addr, ushort content)
+    {
+        ensurePhysicalRange(addr, sizeof(ushort));
+        WritePhysical(addr,     (byte)content);
+        WritePhysical(addr + 1, (byte)(content >> 8));
+    }
+
+    public Memory<byte> GetPhysicalView(uint addr, int length)
+    {
+        ensurePhysicalRange(addr, length);
+        ensureWritableViewDoesNotIntersectSystemRom(addr, length);
+        return data.AsMemory((int)addr, length);
+    }
+
+    public ReadOnlyMemory<byte> GetPhysicalReadOnlyView(uint addr, int length)
+    {
+        ensurePhysicalRange(addr, length);
+        return data.AsMemory((int)addr, length);
+    }
+
+    public PhysicalMemoryView CreatePhysicalView(uint addr, int length)
+    {
+        ensurePhysicalRange(addr, length);
+        return new PhysicalMemoryView(this, addr, length);
     }
 
     public static uint ToPhysicalAddress(ushort logical, byte sg)
@@ -33,6 +101,97 @@ public sealed class Memory
 
     public void WriteLogical(ushort addr, byte sg, byte content)
     {
-        WritePhysical(ToPhysicalAddress(addr,sg),content);
+        WritePhysical(ToPhysicalAddress(addr, sg), content);
+    }
+
+    public ushort ReadLogicalWord(ushort addr, byte sg)
+    {
+        ushort next = unchecked((ushort)(addr + 1));
+        return (ushort)(ReadLogical(addr, sg) | (ReadLogical(next, sg) << 8));
+    }
+
+    public void WriteLogicalWord(ushort addr, byte sg, ushort content)
+    {
+        ushort next = unchecked((ushort)(addr + 1));
+        WriteLogical(addr, sg, (byte)content);
+        WriteLogical(next, sg, (byte)(content >> 8));
+    }
+
+    private bool isSystemRomAddress(uint addr)
+    {
+        return systemRomLoaded && addr is >= SYSTEM_ROM_START and < SYSTEM_ROM_START + SYSTEM_ROM_LENGTH;
+    }
+
+    private static void ensurePhysicalRange(uint addr, int length)
+    {
+        if (length < 0 || addr > INSTALLED_BYTES || (ulong)addr + (uint)length > INSTALLED_BYTES)
+            throw new ArgumentOutOfRangeException(nameof(addr), "Physical memory range is out of bounds.");
+    }
+
+    private void ensureWritableViewDoesNotIntersectSystemRom(uint addr, int length)
+    {
+        if (!systemRomLoaded || length == 0)
+            return;
+
+        uint endExclusive    = addr + (uint)length;
+        uint romEndExclusive = SYSTEM_ROM_START + SYSTEM_ROM_LENGTH;
+        if (addr < romEndExclusive && endExclusive > SYSTEM_ROM_START)
+        {
+            throw new InvalidOperationException(
+                "A writable physical view cannot overlap the system ROM. Use CreatePhysicalView for protected DMA access.");
+        }
+    }
+}
+
+/// <summary>
+/// A bounded physical-memory window for DMA and debugger code. Its operations
+/// use <see cref="Memory"/> accessors, so writes to system ROM are ignored.
+/// </summary>
+public sealed class PhysicalMemoryView
+{
+    private readonly Memory memory;
+    private readonly uint   start;
+
+    internal PhysicalMemoryView(Memory memory, uint start, int length)
+    {
+        this.memory = memory;
+        this.start  = start;
+        Length      = length;
+    }
+
+    public int Length { get; }
+
+    public byte Read(int offset)
+    {
+        return memory.ReadPhysical(addressAt(offset));
+    }
+
+    public void Write(int offset, byte value)
+    {
+        memory.WritePhysical(addressAt(offset), value);
+    }
+
+    public ushort ReadWord(int offset)
+    {
+        ensureOffset(offset, sizeof(ushort));
+        return memory.ReadPhysicalWord(start + (uint)offset);
+    }
+
+    public void WriteWord(int offset, ushort value)
+    {
+        ensureOffset(offset, sizeof(ushort));
+        memory.WritePhysicalWord(start + (uint)offset, value);
+    }
+
+    private uint addressAt(int offset)
+    {
+        ensureOffset(offset, 1);
+        return start + (uint)offset;
+    }
+
+    private void ensureOffset(int offset, int count)
+    {
+        if (offset < 0 || count > Length - offset)
+            throw new ArgumentOutOfRangeException(nameof(offset), "Physical view offset is out of bounds.");
     }
 }
