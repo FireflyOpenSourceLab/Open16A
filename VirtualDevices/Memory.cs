@@ -68,13 +68,6 @@ public sealed class Memory
         WritePhysical(addr + 1, (byte)(content >> 8));
     }
 
-    public Memory<byte> GetPhysicalView(uint addr, int length)
-    {
-        ensurePhysicalRange(addr, length);
-        ensureWritableViewDoesNotIntersectSystemRom(addr, length);
-        return data.AsMemory((int)addr, length);
-    }
-
     public ReadOnlyMemory<byte> GetPhysicalReadOnlyView(uint addr, int length)
     {
         ensurePhysicalRange(addr, length);
@@ -128,19 +121,6 @@ public sealed class Memory
             throw new ArgumentOutOfRangeException(nameof(addr), "Physical memory range is out of bounds.");
     }
 
-    private void ensureWritableViewDoesNotIntersectSystemRom(uint addr, int length)
-    {
-        if (!systemRomLoaded || length == 0)
-            return;
-
-        uint endExclusive    = addr + (uint)length;
-        uint romEndExclusive = SYSTEM_ROM_START + SYSTEM_ROM_LENGTH;
-        if (addr < romEndExclusive && endExclusive > SYSTEM_ROM_START)
-        {
-            throw new InvalidOperationException(
-                "A writable physical view cannot overlap the system ROM. Use CreatePhysicalView for protected DMA access.");
-        }
-    }
 }
 
 /// <summary>
@@ -181,6 +161,24 @@ public sealed class PhysicalMemoryView
     {
         ensureOffset(offset, sizeof(ushort));
         memory.WritePhysicalWord(start + (uint)offset, value);
+    }
+
+    public void CopyTo(Span<byte> destination)
+    {
+        if (destination.Length != Length)
+            throw new ArgumentException("Destination length must match the physical view length.", nameof(destination));
+
+        for (var offset = 0; offset < Length; offset++)
+            destination[offset] = memory.ReadPhysical(start + (uint)offset);
+    }
+
+    public void CopyFrom(ReadOnlySpan<byte> source)
+    {
+        if (source.Length != Length)
+            throw new ArgumentException("Source length must match the physical view length.", nameof(source));
+
+        for (var offset = 0; offset < Length; offset++)
+            memory.WritePhysical(start + (uint)offset, source[offset]);
     }
 
     private uint addressAt(int offset)

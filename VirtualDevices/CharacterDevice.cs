@@ -29,10 +29,10 @@ public sealed class CharacterDevice
     public const int CellWidth  = 6;
     public const int CellHeight = 8;
 
-    private readonly Memory<byte> videoRam;
+    private readonly PhysicalMemoryView videoRam;
     private readonly VideoDevice  video;
 
-    public CharacterDevice(Memory<byte> videoRam, VideoDevice video)
+    public CharacterDevice(PhysicalMemoryView videoRam, VideoDevice video)
     {
         ArgumentNullException.ThrowIfNull(video);
 
@@ -263,30 +263,27 @@ public sealed class CharacterDevice
 
     private byte ReadPixel(TextLayout layout, int x, int y)
     {
-        ReadOnlySpan<byte> vram = videoRam.Span;
-
         if (!layout.Packed2Bpp)
-            return vram[y * 256 + x];
+            return videoRam.Read(y * 256 + x);
 
         int address = y * (512 / 4) + x / 4;
         int shift   = (3 - x % 4) * 2;
-        return (byte)((vram[address] >> shift) & 3);
+        return (byte)((videoRam.Read(address) >> shift) & 3);
     }
 
     private void WritePixel(TextLayout layout, int x, int y, ushort color)
     {
-        Span<byte> vram = videoRam.Span;
-
         if (!layout.Packed2Bpp)
         {
-            vram[y * 256 + x] = (byte)color;
+            videoRam.Write(y * 256 + x, (byte)color);
             return;
         }
 
         int  address = y * (512 / 4) + x / 4;
         int  shift   = (3 - x % 4) * 2;
         byte mask    = (byte)(3 << shift);
-        vram[address] = (byte)((vram[address] & ~mask) | (((byte)color & 3) << shift));
+        byte current = videoRam.Read(address);
+        videoRam.Write(address, (byte)((current & ~mask) | (((byte)color & 3) << shift)));
     }
 
     private readonly record struct TextLayout(

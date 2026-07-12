@@ -102,7 +102,7 @@ public sealed class CpuAndMachineTests
 
         Assert.Equal((byte)0xA5, memory.ReadPhysical(Memory.SYSTEM_ROM_START));
         Assert.Equal((byte)0xA5, memory.ReadLogical(Memory.SYSTEM_ROM_START, 0));
-        Assert.Throws<InvalidOperationException>(() => memory.GetPhysicalView(Memory.SYSTEM_ROM_START, 1));
+        Assert.Equal((byte)0xA5, memory.CreatePhysicalView(Memory.SYSTEM_ROM_START, 1).Read(0));
     }
 
     [Fact]

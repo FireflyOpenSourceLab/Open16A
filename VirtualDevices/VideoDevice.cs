@@ -31,7 +31,7 @@ public sealed class VideoDevice : IClockedDevice
 
     private readonly InterruptController interrupts;
     private readonly byte                interruptVector;
-    private readonly Memory<byte>        videoRam;
+    private readonly PhysicalMemoryView  videoRam;
     private readonly byte[]              pendingVram      = new byte[VIDEO_RAM_LENGTH];
     private readonly byte[]              displayedVram    = new byte[VIDEO_RAM_LENGTH];
     private readonly Rgb24[]             palette          = new Rgb24[256];
@@ -48,7 +48,7 @@ public sealed class VideoDevice : IClockedDevice
     public VideoDevice(
         InterruptController interrupts,
         byte                interruptVector,
-        Memory<byte>        videoRam,
+        PhysicalMemoryView  videoRam,
         ulong               frameCycles = DEFAULT_FRAME_CYCLES)
     {
         ArgumentNullException.ThrowIfNull(interrupts);
@@ -114,7 +114,7 @@ public sealed class VideoDevice : IClockedDevice
             return false;
         }
 
-        videoRam.Span.CopyTo(pendingVram);
+        videoRam.CopyTo(pendingVram);
         palette.CopyTo(pendingPalette, 0);
         pendingMode     =  mode;
         WriteMode       =  mode;
