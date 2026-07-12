@@ -4,14 +4,11 @@
 
 ## 开发与安装
 
-先构建 LSP，再安装扩展依赖和打包：
+安装扩展依赖并打包。`npm run package` 会将 LSP 以 Windows x64 Native AOT 可执行文件编译进 VSIX；安装后的扩展不需要工作区内的 LSP 文件，也不需要本机 `dotnet`。
 
 ```powershell
-cd D:\sim\OldSimulator
-dotnet build toolchains\Open16A-LSP
-cd toolchains\Open16A-VSCode
+cd D:\sim\OldSimulator\toolchains\Open16A-VSCode
 npm install
-npm run compile
 npm run package
 ```
 
@@ -21,9 +18,10 @@ npm run package
 
 1. `open16a.languageServer.path` 设置。
 2. 环境变量 `OPEN16A_LSP_PATH`。
-3. 当前工作区根目录的 `Open16A-LSP.dll`。
-4. 当前工作区下的 `toolchains/Open16A-LSP/bin/Debug/net10.0/Open16A-LSP.dll`。
+3. VSIX 内置的 AOT `Open16A-LSP.exe`。
+4. 当前工作区根目录的 `Open16A-LSP.dll`。
+5. 当前工作区下的 `toolchains/Open16A-LSP/bin/Debug/net10.0/Open16A-LSP.dll`。
 
-默认服务器以 `dotnet <Open16A-LSP.dll>` 启动。`open16a.languageServer.dotnetPath` 可改为 `dotnet` 的绝对路径。
+内置服务器直接启动。使用外部 DLL 时，`open16a.languageServer.dotnetPath` 可改为 `dotnet` 的绝对路径。
 
 命令面板中的 `Open16A: Restart Language Server` 可在更新 LSP 后重启连接。
