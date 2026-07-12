@@ -12,14 +12,17 @@ Raylib.SetConfigFlags(
 );
 
 Raylib.InitWindow(1024, 768, "The OPEN1620 Simulator");
+Raylib.SetWindowMinSize(min_window_width, min_window_height);
 const ulong cpu_hz = 16_934_400;
 
 long  previousTimestamp = Stopwatch.GetTimestamp();
 ulong cycleRemainder    = 0;
 
 var machine = new Machine();
-
-Random.Shared.NextBytes(machine.Memory.GetPhysicalView(Machine.VIDEO_RAM_ADDRESS, VideoDevice.VIDEO_RAM_LENGTH).Span);
+var debugger = new DebuggerConsole(machine);
+var randomVram = new byte[VideoDevice.VIDEO_RAM_LENGTH];
+Random.Shared.NextBytes(randomVram);
+machine.Memory.CreatePhysicalView(Machine.VIDEO_RAM_ADDRESS, VideoDevice.VIDEO_RAM_LENGTH).CopyFrom(randomVram);
 
 for (int i = 0; i < 4; i++)
 {
@@ -38,6 +41,8 @@ try
     using var screen = new RayLibScreen();
     while (!Raylib.WindowShouldClose())
     {
+        debugger.UpdateInput();
+
         long now          = Stopwatch.GetTimestamp();
         long elapsedTicks = now - previousTimestamp;
         previousTimestamp = now;
@@ -56,6 +61,7 @@ try
         // 绘制 Screen 纹理和调试界面
         Raylib.ClearBackground(Color.Black);
         screen.Draw();
+        debugger.Draw();
         Raylib.EndDrawing();
     }
 }

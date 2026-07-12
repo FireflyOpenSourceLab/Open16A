@@ -29,6 +29,16 @@ public sealed class InterruptController
 
     public bool TryAcknowledge(bool interruptsEnabled, out byte vector)
     {
+        if (!TryGetPending(interruptsEnabled, out vector))
+            return false;
+
+        pending[vector] = false;
+        pendingCount--;
+        return true;
+    }
+
+    public bool TryGetPending(bool interruptsEnabled, out byte vector)
+    {
         if (!interruptsEnabled || pendingCount == 0)
         {
             vector = 0;
@@ -40,9 +50,7 @@ public sealed class InterruptController
             if (!pending[index])
                 continue;
 
-            vector         = (byte)index;
-            pending[index] = false;
-            pendingCount--;
+            vector = (byte)index;
             return true;
         }
 

@@ -5,6 +5,9 @@ public sealed class Machine
     public const uint VIDEO_RAM_ADDRESS      = 0xF4000;
     public const byte VIDEO_INTERRUPT_VECTOR = 0x10;
 
+    private readonly HashSet<uint> breakpoints = [];
+    private bool skipCurrentBreakpoint;
+
     public Machine(byte[]? systemRom = null, ulong videoFrameCycles = VideoDevice.DEFAULT_FRAME_CYCLES)
     {
         Memory     = systemRom is null ? new Memory() : new Memory(systemRom);
@@ -14,10 +17,10 @@ public sealed class Machine
         Video = new VideoDevice(
             Interrupts,
             VIDEO_INTERRUPT_VECTOR,
-            Memory.GetPhysicalView(VIDEO_RAM_ADDRESS, VideoDevice.VIDEO_RAM_LENGTH),
+            Memory.CreatePhysicalView(VIDEO_RAM_ADDRESS, VideoDevice.VIDEO_RAM_LENGTH),
             videoFrameCycles);
         Character = new CharacterDevice(
-            Memory.GetPhysicalView(VIDEO_RAM_ADDRESS, VideoDevice.VIDEO_RAM_LENGTH),
+            Memory.CreatePhysicalView(VIDEO_RAM_ADDRESS, VideoDevice.VIDEO_RAM_LENGTH),
             Video);
 
         Video.Attach(IoBus, presentPort: 0x20, statusPort: 0x21);
@@ -31,12 +34,27 @@ public sealed class Machine
     public VideoDevice         Video      { get; }
     public CharacterDevice     Character  { get; }
 
+    public bool Paused { get; private set; }
+
+    public IReadOnlyCollection<uint> Breakpoints => breakpoints;
+
+    public uint CurrentPhysicalProgramCounter => Memory.ToPhysicalAddress(Cpu.PC, Cpu.SG);
+
     public void AdvanceCycles(ulong budget)
     {
+        if (Paused)
+            return;
+
         ulong remaining = budget;
 
         while (remaining != 0 && !Cpu.Halted)
         {
+            if (shouldPauseAtBreakpoint())
+            {
+                Paused = true;
+                break;
+            }
+
             ulong cost = Cpu.PeekNextInstructionCost();
             if (cost > remaining)
                 break;
@@ -47,11 +65,51 @@ public sealed class Machine
             acknowledgeInterrupt();
         }
 
-        if (remaining != 0)
+        if (remaining != 0 && !Paused)
         {
             advanceDevices(remaining);
             acknowledgeInterrupt();
         }
+    }
+
+    public void Pause() => Paused = true;
+
+    public void Resume()
+    {
+        skipCurrentBreakpoint = breakpoints.Contains(CurrentPhysicalProgramCounter);
+        Paused = false;
+    }
+
+    public bool AddBreakpoint(uint physicalAddress)
+    {
+        if (physicalAddress >= Memory.INSTALLED_BYTES)
+            throw new ArgumentOutOfRangeException(nameof(physicalAddress));
+
+        return breakpoints.Add(physicalAddress);
+    }
+
+    public bool RemoveBreakpoint(uint physicalAddress) => breakpoints.Remove(physicalAddress);
+
+    public void ClearBreakpoints() => breakpoints.Clear();
+
+    public void Reset()
+    {
+        Cpu.Reset();
+        Paused = false;
+        skipCurrentBreakpoint = false;
+    }
+
+    public ulong StepInstruction()
+    {
+        Paused = true;
+
+        if (Cpu.Halted)
+            return 0;
+
+        ulong cycles = Cpu.ExecuteNextInstruction();
+        advanceDevices(cycles);
+        acknowledgeInterrupt();
+        return cycles;
     }
 
     private void advanceDevices(ulong cycles)
@@ -61,7 +119,20 @@ public sealed class Machine
 
     private void acknowledgeInterrupt()
     {
-        if (Interrupts.TryAcknowledge(Cpu.InterruptsEnabled, out byte vector))
-            Cpu.TryEnterInterrupt(vector);
+        if (Interrupts.TryGetPending(Cpu.InterruptsEnabled, out byte vector) && Cpu.TryEnterInterrupt(vector))
+            Interrupts.Clear(vector);
+    }
+
+    private bool shouldPauseAtBreakpoint()
+    {
+        uint address = CurrentPhysicalProgramCounter;
+        if (skipCurrentBreakpoint && breakpoints.Contains(address))
+        {
+            skipCurrentBreakpoint = false;
+            return false;
+        }
+
+        skipCurrentBreakpoint = false;
+        return breakpoints.Contains(address);
     }
 }
