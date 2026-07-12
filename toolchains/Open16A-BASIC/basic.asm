@@ -76,6 +76,12 @@ input_wait:
 
 submit_input:
     calla newline
+    li r1, input_length
+    ld.bu r2, [r1]
+    li r1, input_buffer
+    add r1, r1, r2
+    li r0, 0
+    st.b r0, [r1]
     calla execute_direct
     jmpa ready
 
@@ -136,9 +142,13 @@ direct_command:
     calla run_program
     ret
 direct_cls:
+    li r2, input_length
+    ld.bu r2, [r2]
+    li r3, 3
+    bne r2, r3, direct_new
     ld.bu r2, [r1]
     li r3, 0063h
-    bne r2, r3, direct_error
+    bne r2, r3, direct_new
     ld.bu r2, [r1 + 1]
     li r3, 006ch
     bne r2, r3, direct_error
@@ -149,9 +159,124 @@ direct_cls:
     out 0037h, r0
     out 0020h, r0
     ret
+direct_new:
+    li r2, input_length
+    ld.bu r2, [r2]
+    li r3, 3
+    bne r2, r3, direct_list
+    ld.bu r2, [r1]
+    li r3, 006eh
+    bne r2, r3, direct_list
+    ld.bu r2, [r1 + 1]
+    li r3, 0065h
+    bne r2, r3, direct_list
+    ld.bu r2, [r1 + 2]
+    li r3, 0077h
+    bne r2, r3, direct_list
+    li r3, 4000h
+    li r0, 0
+    st.b r0, [r3]
+    ret
+direct_list:
+    li r2, input_length
+    ld.bu r2, [r2]
+    li r3, 4
+    bne r2, r3, direct_error
+    ld.bu r2, [r1]
+    li r3, 006ch
+    bne r2, r3, direct_error
+    ld.bu r2, [r1 + 1]
+    li r3, 0069h
+    bne r2, r3, direct_error
+    ld.bu r2, [r1 + 2]
+    li r3, 0073h
+    bne r2, r3, direct_error
+    ld.bu r2, [r1 + 3]
+    li r3, 0074h
+    bne r2, r3, direct_error
+    calla list_program
+    ret
 direct_error:
     li r1, syntax_text
     calla puts
+    ret
+
+; Lists the record forms accepted by the in-guest editor. Packed programs
+; with newer statements still retain their line number and show '?' until the
+; corresponding detokenizer is added.
+list_program:
+    li r1, 4000h
+    ld.bu r0, [r1]
+    li r3, 0042h
+    bne r0, r3, no_program
+    ld.w r2, [r1 + 6]
+    li r3, 400ah
+    add r2, r2, r3
+    li r3, list_end_address
+    st.w r2, [r3]
+    li r1, 400ah
+list_line:
+    li r3, list_end_address
+    ld.w r2, [r3]
+    beq r1, r2, list_done
+    ld.w r0, [r1]
+    calla print_integer
+    li r0, 0020h
+    calla putc
+    ld.w r3, [r1 + 2]
+    li r4, 4
+    add r4, r4, r1
+    add r6, r4, r3
+    li r7, list_next
+    st.w r6, [r7]
+    ld.bu r5, [r4]
+    li r6, 0091h
+    beq r5, r6, list_print
+    li r6, 009dh
+    beq r5, r6, list_end
+    li r6, 00a0h
+    beq r5, r6, list_cls
+    li r0, 003fh
+    calla putc
+    jmpa list_advance
+list_print:
+    li r1, list_print_text
+    calla puts
+    li r6, 1
+    add r4, r4, r6
+    ld.bu r5, [r4]
+    li r6, 0083h
+    bne r5, r6, list_unknown
+    li r6, 1
+    add r4, r4, r6
+    ld.bu r5, [r4]
+    add r4, r4, r6
+list_print_string:
+    li r6, 0
+    beq r5, r6, list_advance
+    ld.bu r0, [r4]
+    li r6, 1
+    add r4, r4, r6
+    sub r5, r5, r6
+    calla putc
+    jmpa list_print_string
+list_end:
+    li r1, list_end_text
+    calla puts
+    jmpa list_advance
+list_cls:
+    li r1, list_cls_text
+    calla puts
+    jmpa list_advance
+list_unknown:
+    li r0, 003fh
+    calla putc
+list_advance:
+    calla newline
+    li r7, list_next
+    ld.w r1, [r7]
+    jmpa list_line
+list_done:
     ret
 
 ; Minimal in-guest program editor. It accepts a decimal line number followed
@@ -186,6 +311,8 @@ skip_line_spaces:
     jmpa skip_line_spaces
 parse_statement:
     ld.bu r3, [r1]
+    li r4, 0
+    beq r3, r4, delete_program_line
     li r4, 0070h
     beq r3, r4, parse_print_line
     li r4, 0065h
@@ -250,7 +377,19 @@ store_end_line:
     ret
 
 ; R0=token length, R1=first token, R2=second token, R5=string source, R6=string length.
+; Program records remain sorted by line number. This makes interactive editing
+; use the same B16P image the host packer emits.
 append_program_record:
+    li r3, record_token_length
+    st.w r0, [r3]
+    li r3, record_first_token
+    st.b r1, [r3]
+    li r3, record_second_token
+    st.b r2, [r3]
+    li r3, record_string_source
+    st.w r5, [r3]
+    li r3, record_string_length
+    st.w r6, [r3]
     li r3, 4000h
     ld.bu r4, [r3]
     li r7, 0042h
@@ -270,46 +409,180 @@ append_program_record:
     st.w r4, [r3 + 6]
     st.w r4, [r3 + 8]
 program_header_ready:
-    ld.w r4, [r3 + 6]
-    li r7, 400ah
-    add r4, r4, r7
+    ; Find insertion point and remove the old record when editing a line.
+    li r4, 400ah
+    ld.w r5, [r3 + 6]
+    add r5, r5, r4
+find_insert_position:
+    beq r4, r5, insert_position_found
+    ld.w r6, [r4]
     li r7, stored_line_number
     ld.w r7, [r7]
-    st.w r7, [r4]
-    st.w r0, [r4 + 2]
+    blt r7, r6, insert_position_found
+    beq r7, r6, replace_program_record
+    ld.w r6, [r4 + 2]
     li r7, 4
-    add r4, r4, r7
-    st.b r1, [r4]
-    li r7, 1
-    add r4, r4, r7
-    li r7, 1
-    beq r0, r7, append_finish
-    st.b r2, [r4]
-    add r4, r4, r7
-    st.b r6, [r4]
-    add r4, r4, r7
-append_string_bytes:
+    add r6, r6, r7
+    add r4, r4, r6
+    jmpa find_insert_position
+replace_program_record:
+    mov r0, r4
+    calla remove_program_record
+    mov r4, r0
+insert_position_found:
+    li r3, insert_position
+    st.w r4, [r3]
+    li r3, record_token_length
+    ld.w r0, [r3]
+    li r1, 4
+    add r0, r0, r1
+    li r3, 4006h
+    ld.w r1, [r3]
+    li r2, 400ah
+    add r1, r1, r2
+    li r3, program_old_end
+    st.w r1, [r3]
+    add r1, r1, r0
+    li r2, 7000h
+    bgt r1, r2, program_full
+    li r2, insert_position
+    ld.w r2, [r2]
+    li r3, program_old_end
+    ld.w r1, [r3]
+shift_program_right:
+    beq r1, r2, write_program_record
+    li r3, 1
+    sub r1, r1, r3
+    ld.bu r4, [r1]
+    li r5, record_token_length
+    ld.w r5, [r5]
+    li r6, 4
+    add r5, r5, r6
+    add r5, r5, r1
+    st.b r4, [r5]
+    jmpa shift_program_right
+write_program_record:
+    li r4, insert_position
+    ld.w r4, [r4]
+    li r5, stored_line_number
+    ld.w r5, [r5]
+    st.w r5, [r4]
+    li r5, record_token_length
+    ld.w r5, [r5]
+    st.w r5, [r4 + 2]
+    li r6, 4
+    add r4, r4, r6
+    li r5, record_first_token
+    ld.bu r5, [r5]
+    st.b r5, [r4]
+    li r6, 1
+    add r4, r4, r6
+    li r5, record_token_length
+    ld.w r5, [r5]
+    li r6, 1
+    beq r5, r6, write_record_finish
+    li r5, record_second_token
+    ld.bu r5, [r5]
+    st.b r5, [r4]
+    add r4, r4, r6
+    li r5, record_string_length
+    ld.w r5, [r5]
+    st.b r5, [r4]
+    add r4, r4, r6
+    li r5, record_string_source
+    ld.w r5, [r5]
+write_string_bytes:
+    li r6, record_string_length
+    ld.w r6, [r6]
     li r7, 0
-    beq r6, r7, append_finish
+    beq r6, r7, write_record_finish
     ld.bu r7, [r5]
     st.b r7, [r4]
     li r7, 1
     add r5, r5, r7
     add r4, r4, r7
-    sub r6, r6, r7
-    jmpa append_string_bytes
-append_finish:
+    li r6, record_string_length
+    ld.w r7, [r6]
+    li r3, 1
+    sub r7, r7, r3
+    st.w r7, [r6]
+    jmpa write_string_bytes
+write_record_finish:
     li r4, 4006h
     ld.w r7, [r4]
-    li r3, 4
+    li r3, record_token_length
+    ld.w r3, [r3]
+    li r5, 4
+    add r3, r3, r5
     add r7, r7, r3
-    add r7, r7, r0
     st.w r7, [r4]
     li r4, 4008h
     ld.w r7, [r4]
     li r3, 1
     add r7, r7, r3
     st.w r7, [r4]
+    ret
+
+; R0=record address. Removes it and leaves R0 at the same insertion address.
+remove_program_record:
+    mov r4, r0
+    ld.w r5, [r4 + 2]
+    li r6, 4
+    add r5, r5, r6
+    mov r1, r4
+    add r1, r1, r5
+    li r2, 4006h
+    ld.w r3, [r2]
+    li r6, 400ah
+    add r3, r3, r6
+remove_program_copy:
+    beq r1, r3, remove_program_finish
+    ld.bu r6, [r1]
+    st.b r6, [r4]
+    li r6, 1
+    add r1, r1, r6
+    add r4, r4, r6
+    jmpa remove_program_copy
+remove_program_finish:
+    li r2, 4006h
+    ld.w r3, [r2]
+    sub r3, r3, r5
+    st.w r3, [r2]
+    li r2, 4008h
+    ld.w r3, [r2]
+    li r6, 1
+    sub r3, r3, r6
+    st.w r3, [r2]
+    ret
+
+delete_program_line:
+    li r3, 4000h
+    ld.bu r4, [r3]
+    li r5, 0042h
+    bne r4, r5, delete_line_done
+    li r0, 400ah
+    ld.w r1, [r3 + 6]
+    add r1, r1, r0
+delete_line_scan:
+    beq r0, r1, delete_line_done
+    ld.w r4, [r0]
+    li r5, stored_line_number
+    ld.w r5, [r5]
+    beq r4, r5, delete_line_found
+    blt r5, r4, delete_line_done
+    ld.w r4, [r0 + 2]
+    li r5, 4
+    add r4, r4, r5
+    add r0, r0, r4
+    jmpa delete_line_scan
+delete_line_found:
+    calla remove_program_record
+delete_line_done:
+    ret
+
+program_full:
+    li r1, program_full_text
+    calla puts
     ret
 
 maybe_autorun:
@@ -690,6 +963,32 @@ syntax_text:
     .byte '?','S','Y','N','T','A','X',' ','E','R','R','O','R',10,0
 no_program_text:
     .byte '?','N','O',' ','P','R','O','G','R','A','M',10,0
+program_full_text:
+    .byte '?','P','R','O','G','R','A','M',' ','F','U','L','L',10,0
+list_print_text:
+    .byte 'P','R','I','N','T',' ',0
+list_end_text:
+    .byte 'E','N','D',0
+list_cls_text:
+    .byte 'C','L','S',0
+record_token_length:
+    .word 0
+record_string_source:
+    .word 0
+record_string_length:
+    .word 0
+insert_position:
+    .word 0
+record_first_token:
+    .byte 0
+record_second_token:
+    .byte 0
+list_next:
+    .word 0
+list_end_address:
+    .word 0
+program_old_end:
+    .word 0
 input_length:
     .byte 0
 stored_line_number:

@@ -21,6 +21,13 @@ public static class BasicProgramFormat
     public const byte TypeFloat = 0x00;
     public const byte TypeInteger = 0x40;
     public const byte TypeString = 0x80;
+
+    // Statement tokens added after the original v1 set. Keep the established
+    // values stable: prebuilt program images are part of the guest ABI.
+    public const byte Data = 0xB6;
+    public const byte Read = 0xB7;
+    public const byte Restore = 0xB8;
+    public const byte Cont = 0xB9;
 }
 
 public sealed record BasicProgramLine(ushort Number, byte[] Tokens);
@@ -68,7 +75,9 @@ public static class BasicTokenizer
         ["LEFT$"] = 0xA7, ["RIGHT$"] = 0xA8, ["MID$"] = 0xA9, ["CHR$"] = 0xAA,
         ["STR$"] = 0xAB, ["VAL"] = 0xAC, ["AND"] = 0xAD, ["OR"] = 0xAE,
         ["NOT"] = 0xAF, ["RUN"] = 0xB0, ["LIST"] = 0xB1, ["NEW"] = 0xB2,
-        ["PEEK"] = 0xB3, ["POKE"] = 0xB4, ["ELSE"] = 0xB5
+        ["PEEK"] = 0xB3, ["POKE"] = 0xB4, ["ELSE"] = 0xB5,
+        ["DATA"] = BasicProgramFormat.Data, ["READ"] = BasicProgramFormat.Read,
+        ["RESTORE"] = BasicProgramFormat.Restore, ["CONT"] = BasicProgramFormat.Cont
     };
 
     public static BasicProgramImage ParseProgram(string source, bool autoRun = false)

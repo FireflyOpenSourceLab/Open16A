@@ -38,4 +38,17 @@ public sealed class BasicPackTests
         Assert.Throws<BasicPackException>(() => BasicTokenizer.ParseProgram("10 END\n10 END"));
         Assert.Throws<BasicPackException>(() => BasicTokenizer.ParseProgram("10 PRINT \"你好\""));
     }
+
+    [Fact]
+    public void EncodesDataReadRestoreAndContUsingStableExtensionTokens()
+    {
+        byte[] tokens = BasicTokenizer.Tokenize("DATA 1,\"X\": READ A%, A$: RESTORE 100: CONT");
+
+        Assert.Equal(BasicProgramFormat.Data, tokens[0]);
+        Assert.Contains(BasicProgramFormat.Read, tokens);
+        Assert.Contains(BasicProgramFormat.Restore, tokens);
+        Assert.Contains(BasicProgramFormat.Cont, tokens);
+        Assert.Contains(BasicProgramFormat.IntegerLiteral, tokens);
+        Assert.Contains(BasicProgramFormat.StringLiteral, tokens);
+    }
 }
