@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <PublishAot>true</PublishAot>
+        <InvariantGlobalization>true</InvariantGlobalization>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Raylib-cs" Version="8.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Remove="OldSimulator.Tests\**\*.cs" />
+      <EmbeddedResource Remove="OldSimulator.Tests\**\*" />
+      <None Remove="OldSimulator.Tests\**\*" />
+    </ItemGroup>
+
+</Project>
