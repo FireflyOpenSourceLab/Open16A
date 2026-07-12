@@ -3,7 +3,7 @@ namespace OldSimulator.VirtualDevices;
 public sealed class InterruptController
 {
     private readonly bool[] pending = new bool[256];
-    private int pendingCount;
+    private          int    pendingCount;
 
     public bool HasPending => pendingCount != 0;
 
@@ -40,7 +40,7 @@ public sealed class InterruptController
             if (!pending[index])
                 continue;
 
-            vector = (byte)index;
+            vector         = (byte)index;
             pending[index] = false;
             pendingCount--;
             return true;

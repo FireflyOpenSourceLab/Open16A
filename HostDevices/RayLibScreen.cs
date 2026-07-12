@@ -2,13 +2,14 @@
 using Raylib_cs;
 
 namespace OldSimulator.HostDevices;
+
 using VirtualDevices;
 
 public sealed class RayLibScreen : IDisposable
 {
     private Texture2D texture;
     private Color[]   pixels          = [];
-    private VideoMode currentMode    = VideoMode.Indexed256;
+    private VideoMode currentMode     = VideoMode.Indexed256;
     private ulong     displayedSerial = ulong.MaxValue;
     private bool      disposed;
 
@@ -40,8 +41,8 @@ public sealed class RayLibScreen : IDisposable
             Raylib.UnloadImage(image);
         }
 
-        pixels = new Color[width * height];
-        currentMode   = requestedMode;
+        pixels      = new Color[width * height];
+        currentMode = requestedMode;
     }
 
     public void Draw()
@@ -76,7 +77,6 @@ public sealed class RayLibScreen : IDisposable
     }
 
 
-
     private void decode(VideoFrame frame)
     {
         ReadOnlySpan<byte>  vram    = frame.Vram.Span;
@@ -109,6 +109,7 @@ public sealed class RayLibScreen : IDisposable
                         pixels[pixelStart + 3] = toColor(palette[packed & 3]);
                     }
                 }
+
                 break;
 
             case VideoMode.Rgba8888:
@@ -121,6 +122,7 @@ public sealed class RayLibScreen : IDisposable
                         vram[source + 2],
                         vram[source + 3]);
                 }
+
                 break;
 
             default:
@@ -134,9 +136,10 @@ public sealed class RayLibScreen : IDisposable
             return;
         EnsureSurface(frame.Mode);
         decode(frame);
-        Raylib.UpdateTexture(texture,pixels);
+        Raylib.UpdateTexture(texture, pixels);
         displayedSerial = frame.Serial;
     }
+
     public void Dispose()
     {
         if (disposed)

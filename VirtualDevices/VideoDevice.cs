@@ -3,26 +3,26 @@ namespace OldSimulator.VirtualDevices;
 public enum VideoMode : ushort
 {
     Indexed256 = 0,
-    Indexed4 = 1,
-    Rgba8888 = 2
+    Indexed4   = 1,
+    Rgba8888   = 2
 }
 
 [Flags]
 public enum VideoStatus : ushort
 {
-    None = 0,
-    PresentBusy = 1 << 0,
+    None            = 0,
+    PresentBusy     = 1 << 0,
     PresentRejected = 1 << 1
 }
 
 public readonly record struct Rgb24(byte Red, byte Green, byte Blue);
 
 public readonly record struct VideoFrame(
-    ulong Serial,
-    VideoMode Mode,
-    ReadOnlyMemory<byte> Vram,
+    ulong                 Serial,
+    VideoMode             Mode,
+    ReadOnlyMemory<byte>  Vram,
     ReadOnlyMemory<Rgb24> Palette,
-    Rgb24 Backdrop);
+    Rgb24                 Backdrop);
 
 public sealed class VideoDevice : IClockedDevice
 {

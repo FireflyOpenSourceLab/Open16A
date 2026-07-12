@@ -2,7 +2,7 @@
 
 public sealed class IoBus
 {
-    private readonly Dictionary<ushort, Func<ushort>> reads = [];
+    private readonly Dictionary<ushort, Func<ushort>>   reads  = [];
     private readonly Dictionary<ushort, Action<ushort>> writes = [];
 
     public void RegisterRead(ushort port, Func<ushort> handler)
