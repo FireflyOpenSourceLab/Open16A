@@ -145,7 +145,7 @@ public sealed class DebuggerConsole : IDisposable
                 WriteLine(result);
             return result;
         }
-        catch (ArgumentException exception)
+        catch (Exception exception) when (exception is ArgumentException or FormatException or OverflowException)
         {
             WriteLine($"Error: {exception.Message}");
             return exception.Message;
@@ -392,9 +392,15 @@ public sealed class DebuggerConsole : IDisposable
 
     private static uint ParseAddress(string value)
     {
-        int parsed = ParseInt(value);
-        if (parsed < 0 || parsed >= Memory.INSTALLED_BYTES)
+        string digits = value.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? value[2..]
+            : value.EndsWith("h", StringComparison.OrdinalIgnoreCase)
+                ? value[..^1]
+                : value;
+
+        if (!uint.TryParse(digits, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out uint parsed)
+            || parsed >= Memory.INSTALLED_BYTES)
             throw new ArgumentException("Physical address must be within 00000-FFFFF.");
-        return (uint)parsed;
+        return parsed;
     }
 }

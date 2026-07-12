@@ -70,6 +70,15 @@ public sealed class DebuggerConsoleTests
     }
 
     [Fact]
+    public void BareDebuggerAddressesAreHexadecimalAndInvalidInputDoesNotEscape()
+    {
+        var console = new DebuggerConsole(new Machine());
+
+        Assert.Contains("No breakpoint at F4000", console.Execute("clear F4000"));
+        Assert.Contains("Error:", console.Execute("mem not-an-address"));
+    }
+
+    [Fact]
     public void ProtectedViewsRespectRomWrites()
     {
         byte[] rom = new byte[Memory.SYSTEM_ROM_LENGTH];
