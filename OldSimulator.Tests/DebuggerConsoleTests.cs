@@ -98,6 +98,20 @@ public sealed class DebuggerConsoleTests
     }
 
     [Fact]
+    public void InAndOutUseTheVirtualIoBus()
+    {
+        var machine = new Machine();
+        var console = new DebuggerConsole(machine);
+
+        Assert.Equal("0020 <- 0001", console.Execute("out 20 1"));
+        Assert.Equal(VideoMode.Indexed4, machine.Video.WriteMode);
+        Assert.Equal("0021 -> 0001", console.Execute("in 21"));
+
+        Assert.Contains("Usage: out", console.Execute("out 20"));
+        Assert.Contains("I/O port", console.Execute("in 10000"));
+    }
+
+    [Fact]
     public void ProtectedViewsRespectRomWrites()
     {
         byte[] rom = new byte[Memory.SYSTEM_ROM_LENGTH];

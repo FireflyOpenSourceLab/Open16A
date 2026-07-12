@@ -126,12 +126,14 @@ public sealed class DebuggerConsole : IDisposable
         {
             string result = parts[0].ToLowerInvariant() switch
             {
-                "help" => "Commands: regs, status, pause, run, step [n], mem <addr> [len], poke <addr> <byte>, fill <addr> <len> <byte>, break <addr>, clear <addr>|all, breaks, set <reg> <value>, reset",
+                "help" => "Commands: regs, status, pause, run, step [n], in <port>, out <port> <word>, mem <addr> [len], poke <addr> <byte>, fill <addr> <len> <byte>, break <addr>, clear <addr>|all, breaks, set <reg> <value>, reset",
                 "regs" => FormatRegisters(),
                 "status" => FormatStatus(),
                 "pause" => Pause(),
                 "run" or "continue" => Resume(),
                 "step" or "s" => Step(parts),
+                "in" => ReadPort(parts),
+                "out" => WritePort(parts),
                 "mem" or "m" => DumpMemory(parts),
                 "poke" => PokeMemory(parts),
                 "fill" => FillMemory(parts),
@@ -199,6 +201,27 @@ public sealed class DebuggerConsole : IDisposable
         }
 
         return $"Stepped {count} instruction(s), {cycles} cycle(s). {FormatStatus()}";
+    }
+
+    private string ReadPort(string[] parts)
+    {
+        if (parts.Length != 2)
+            throw new ArgumentException("Usage: in <port>");
+
+        ushort port = ParsePort(parts[1]);
+        ushort value = machine.IoBus.Read(port);
+        return $"{port:X4} -> {value:X4}";
+    }
+
+    private string WritePort(string[] parts)
+    {
+        if (parts.Length != 3)
+            throw new ArgumentException("Usage: out <port> <word>");
+
+        ushort port = ParsePort(parts[1]);
+        ushort value = ParseWord(parts[2]);
+        machine.IoBus.Write(port, value);
+        return $"{port:X4} <- {value:X4}";
     }
 
     private string DumpMemory(string[] parts)
@@ -426,6 +449,27 @@ public sealed class DebuggerConsole : IDisposable
         if (parsed is < byte.MinValue or > byte.MaxValue)
             throw new ArgumentException("Byte value must be within 00-FF.");
         return (byte)parsed;
+    }
+
+    private static ushort ParseWord(string value)
+    {
+        int parsed = ParseInt(value);
+        if (parsed is < ushort.MinValue or > ushort.MaxValue)
+            throw new ArgumentException("Word value must be within 0000-FFFF.");
+        return (ushort)parsed;
+    }
+
+    private static ushort ParsePort(string value)
+    {
+        string digits = value.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? value[2..]
+            : value.EndsWith("h", StringComparison.OrdinalIgnoreCase)
+                ? value[..^1]
+                : value;
+
+        if (!ushort.TryParse(digits, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out ushort parsed))
+            throw new ArgumentException("I/O port must be within 0000-FFFF.");
+        return parsed;
     }
 
     private static uint ParseAddress(string value)
