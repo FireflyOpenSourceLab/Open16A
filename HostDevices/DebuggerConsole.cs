@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using System.Text;
 using Raylib_cs;
 using OldSimulator.VirtualDevices;
 
@@ -118,20 +119,22 @@ public sealed class DebuggerConsole : IDisposable
 
     public string Execute(string command)
     {
-        string[] parts = command.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length == 0)
-            return string.Empty;
-
         try
         {
+            string[] parts = SplitCommand(command);
+            if (parts.Length == 0)
+                return string.Empty;
+
             string result = parts[0].ToLowerInvariant() switch
             {
-                "help" => "Commands: regs, status, pause, run, step [n], in <port>, out <port> <word>, mem <addr> [len], poke <addr> <byte>, fill <addr> <len> <byte>, break <addr>, clear <addr>|all, breaks, set <reg> <value>, reset",
+                "help" => "Commands: regs, status, pause, run, step [n], load <file> [base], loadrun <file> [base], in <port>, out <port> <word>, mem <addr> [len], poke <addr> <byte>, fill <addr> <len> <byte>, break <addr>, clear <addr>|all, breaks, set <reg> <value>, reset",
                 "regs" => FormatRegisters(),
                 "status" => FormatStatus(),
                 "pause" => Pause(),
                 "run" or "continue" => Resume(),
                 "step" or "s" => Step(parts),
+                "load" => LoadProgram(parts, start: false),
+                "loadrun" => LoadProgram(parts, start: true),
                 "in" => ReadPort(parts),
                 "out" => WritePort(parts),
                 "mem" or "m" => DumpMemory(parts),
@@ -149,7 +152,7 @@ public sealed class DebuggerConsole : IDisposable
                 WriteLine(result);
             return result;
         }
-        catch (Exception exception) when (exception is ArgumentException or FormatException or OverflowException)
+        catch (Exception exception) when (exception is ArgumentException or FormatException or OverflowException or IOException or UnauthorizedAccessException)
         {
             WriteLine($"Error: {exception.Message}");
             return exception.Message;
@@ -201,6 +204,58 @@ public sealed class DebuggerConsole : IDisposable
         }
 
         return $"Stepped {count} instruction(s), {cycles} cycle(s). {FormatStatus()}";
+    }
+
+    private string LoadProgram(string[] parts, bool start)
+    {
+        if (parts.Length is < 2 or > 3)
+            throw new ArgumentException($"Usage: {(start ? "loadrun" : "load")} <file> [physical-base]");
+
+        uint baseAddress = parts.Length == 3 ? ParseAddress(parts[2]) : Cpu.INITIAL_PROGRAM_COUNTER;
+        byte[] program = File.ReadAllBytes(parts[1]);
+        if (program.Length == 0)
+            throw new ArgumentException("Program file is empty.");
+        if ((baseAddress & 1) != 0)
+            throw new ArgumentException("Program base address must be even.");
+        if ((ulong)baseAddress + (uint)program.Length > Memory.INSTALLED_BYTES)
+            throw new ArgumentException("Program does not fit within physical memory.");
+
+        ulong endAddress = (ulong)baseAddress + (uint)program.Length;
+        if (machine.Memory.HasSystemRom
+            && baseAddress < Memory.SYSTEM_ROM_START + Memory.SYSTEM_ROM_LENGTH
+            && endAddress > Memory.SYSTEM_ROM_START)
+        {
+            throw new ArgumentException("Program range overlaps protected system ROM.");
+        }
+
+        for (var offset = 0; offset < program.Length; offset++)
+            machine.Memory.WritePhysical(baseAddress + (uint)offset, program[offset]);
+
+        machine.Reset();
+        SetEntryPoint(baseAddress);
+
+        if (start)
+        {
+            machine.Resume();
+            IsOpen = false;
+            return $"Loaded {program.Length} byte(s) at {baseAddress:X5}. Running.";
+        }
+
+        machine.Pause();
+        return $"Loaded {program.Length} byte(s) at {baseAddress:X5}. {FormatStatus()}";
+    }
+
+    private void SetEntryPoint(uint physicalAddress)
+    {
+        if (physicalAddress < 0xC000)
+        {
+            machine.Cpu.SG = 0;
+            machine.Cpu.PC = (ushort)physicalAddress;
+            return;
+        }
+
+        machine.Cpu.SG = (byte)(physicalAddress >> 14);
+        machine.Cpu.PC = (ushort)(0xC000 | (physicalAddress & 0x3FFF));
     }
 
     private string ReadPort(string[] parts)
@@ -346,6 +401,42 @@ public sealed class DebuggerConsole : IDisposable
         history.Add(line);
         while (history.Count > MaximumHistoryLines)
             history.RemoveAt(0);
+    }
+
+    private static string[] SplitCommand(string command)
+    {
+        var parts = new List<string>();
+        var current = new StringBuilder();
+        bool quoted = false;
+
+        foreach (char character in command.Trim())
+        {
+            if (character == '"')
+            {
+                quoted = !quoted;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(character) && !quoted)
+            {
+                if (current.Length != 0)
+                {
+                    parts.Add(current.ToString());
+                    current.Clear();
+                }
+
+                continue;
+            }
+
+            current.Append(character);
+        }
+
+        if (quoted)
+            throw new ArgumentException("Unterminated quoted argument.");
+        if (current.Length != 0)
+            parts.Add(current.ToString());
+
+        return [.. parts];
     }
 
     private List<string> WrapHistory(int width)

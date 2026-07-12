@@ -76,6 +76,7 @@ public sealed class DebuggerConsoleTests
 
         Assert.Contains("No breakpoint at F4000", console.Execute("clear F4000"));
         Assert.Contains("Error:", console.Execute("mem not-an-address"));
+        Assert.Contains("Unterminated", console.Execute("load \"unfinished"));
     }
 
     [Fact]
@@ -109,6 +110,60 @@ public sealed class DebuggerConsoleTests
 
         Assert.Contains("Usage: out", console.Execute("out 20"));
         Assert.Contains("I/O port", console.Execute("in 10000"));
+    }
+
+    [Fact]
+    public void LoadCopiesBinaryToPhysicalMemoryAndConfiguresAHighPageEntryPoint()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"open1620 loader {Guid.NewGuid():N}.bin");
+        File.WriteAllBytes(path, [0x00, 0xE8]); // HALT, little-endian
+
+        try
+        {
+            var machine = new Machine();
+            var console = new DebuggerConsole(machine);
+            machine.Cpu.Registers[0] = 0xBEEF;
+
+            Assert.Contains("23456", console.Execute($"load \"{path}\" 23456"));
+            Assert.True(machine.Paused);
+            Assert.Equal((ushort)0, machine.Cpu.Registers[0]);
+            Assert.Equal((byte)8, machine.Cpu.SG);
+            Assert.Equal((ushort)0xF456, machine.Cpu.PC);
+            Assert.Equal((byte)0x00, machine.Memory.ReadPhysical(0x23456));
+            Assert.Equal((byte)0xE8, machine.Memory.ReadPhysical(0x23457));
+
+            console.Execute("run");
+            machine.AdvanceCycles(1);
+            Assert.True(machine.Cpu.Halted);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void LoadRunStartsImmediatelyAndRefusesToOverwriteSystemRom()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"open1620-loader-{Guid.NewGuid():N}.bin");
+        File.WriteAllBytes(path, [0x00, 0xE8]);
+
+        try
+        {
+            var machine = new Machine();
+            var console = new DebuggerConsole(machine);
+
+            Assert.Contains("Running", console.Execute($"loadrun \"{path}\" 0400"));
+            Assert.False(machine.Paused);
+            Assert.Equal((ushort)0x0400, machine.Cpu.PC);
+
+            var romConsole = new DebuggerConsole(new Machine(new byte[Memory.SYSTEM_ROM_LENGTH]));
+            Assert.Contains("system ROM", romConsole.Execute($"load \"{path}\" 0300"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]
