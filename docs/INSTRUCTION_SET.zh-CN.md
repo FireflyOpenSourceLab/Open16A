@@ -1,8 +1,8 @@
-# OPEN1620 指令集手册
+# Open16A 指令集手册
 
 ## 1. 总览
 
-OPEN1620 是一台以 16-bit 字为基本运算单位的机器。寄存器、普通逻辑地址和 I/O 端口均为 16 bit；物理内存地址为 20 bit，空间为 `00000h-FFFFFh`。
+Open16A 是一台以 16-bit 字为基本运算单位的机器。寄存器、普通逻辑地址和 I/O 端口均为 16 bit；物理内存地址为 20 bit，空间为 `00000h-FFFFFh`。
 
 - `R0-R7`：8 个通用 16-bit 寄存器。`R0` 不是常量零寄存器。
 - `FP0-FP3`：4 个 32-bit 保留寄存器。当前没有浮点或 32-bit 专用指令，程序不可依赖其运算语义。
@@ -42,73 +42,73 @@ OPEN1620 是一台以 16-bit 字为基本运算单位的机器。寄存器、普
 
 | opcode | 助记符 | 字数 | 语义 |
 |---:|---|---:|---|
-| 0 | `NOP` | 1 | 不做任何事。 |
-| 1 | `MOV Rd, Ra` | 1 | `Rd = Ra`。 |
-| 2 | `LI Rd, imm16` | 2 | 装入 16-bit 常量。 |
-| 3 | `LD.BU Rd, [Ra + disp16]` | 2 | 从逻辑地址读取字节并零扩展到 `Rd`。`disp16` 按有符号解释。 |
-| 4 | `LD.W Rd, [Ra + disp16]` | 2 | 从逻辑地址读取一个 16-bit 字。 |
-| 5 | `ST.B Rd, [Ra + disp16]` | 2 | 将 `Rd` 的低字节写到逻辑地址。 |
-| 6 | `ST.W Rd, [Ra + disp16]` | 2 | 将 `Rd` 写为一个 16-bit 字。 |
-| 7 | `ADD Rd, Ra, Rb` | 1 | 无符号位模式加法，低 16 bit 保留。 |
-| 8 | `SUB Rd, Ra, Rb` | 1 | 无符号位模式减法，低 16 bit 保留。 |
-| 9 | `AND Rd, Ra, Rb` | 1 | 按位与。 |
-| 10 | `OR Rd, Ra, Rb` | 1 | 按位或。 |
-| 11 | `XOR Rd, Ra, Rb` | 1 | 按位异或。 |
-| 12 | `SHL Rd, Ra, Rb` | 1 | 左移 `Rb & 0Fh` 位。 |
-| 13 | `SHR Rd, Ra, Rb` | 1 | 逻辑右移 `Rb & 0Fh` 位。 |
-| 14 | `SAR Rd, Ra, Rb` | 1 | 将 `Ra` 视为有符号数算术右移 `Rb & 0Fh` 位。 |
-| 15 | `BEQ Ra, Rb, rel16` | 2 | 两寄存器相等时跳转。 |
-| 16 | `BNE Ra, Rb, rel16` | 2 | 两寄存器不等时跳转。 |
-| 17 | `JMP Ra` | 1 | `PC = Ra`，`SG` 不变。 |
-| 18 | `CALL Ra` | 1 | 先压入返回 `PC`，再 `PC = Ra`。 |
-| 19 | `RET` | 1 | 弹出返回 `PC`。 |
-| 20 | `PUSH Ra` | 1 | 压入 `Ra`。 |
-| 21 | `POP Rd` | 1 | 弹出一个字到 `Rd`。 |
-| 22 | `IN Rd, port16` | 2 | 从 16-bit I/O 端口读取一个字。未映射端口返回零。 |
-| 23 | `OUT port16, Ra` | 2 | 将 `Ra` 写入 16-bit I/O 端口。未映射端口忽略写入。 |
-| 24 | `RDSG Rd` | 1 | 零扩展读取 `SG`。 |
-| 25 | `WRSG Ra` | 1 | `SG = Ra & 003Fh`。 |
-| 26 | `WSGI imm16` | 2 | `SG = imm16 & 003Fh`。 |
-| 27 | `EI` | 1 | 置位 `SR.IE`。 |
-| 28 | `DI` | 1 | 清除 `SR.IE`。 |
-| 29 | `HALT` | 1 | 停止取指，直到可接收的中断进入。 |
-| 30 | `IRET` | 1 | 按 `SG`、`SR`、`PC` 的顺序弹出中断帧并恢复。 |
+| `00h` | `NOP` | 1 | 不做任何事。 |
+| `01h` | `MOV Rd, Ra` | 1 | `Rd = Ra`。 |
+| `02h` | `LI Rd, imm16` | 2 | 装入 16-bit 常量。 |
+| `03h` | `LD.BU Rd, [Ra + disp16]` | 2 | 从逻辑地址读取字节并零扩展到 `Rd`。`disp16` 按有符号解释。 |
+| `04h` | `LD.W Rd, [Ra + disp16]` | 2 | 从逻辑地址读取一个 16-bit 字。 |
+| `05h` | `ST.B Rd, [Ra + disp16]` | 2 | 将 `Rd` 的低字节写到逻辑地址。 |
+| `06h` | `ST.W Rd, [Ra + disp16]` | 2 | 将 `Rd` 写为一个 16-bit 字。 |
+| `07h` | `ADD Rd, Ra, Rb` | 1 | 无符号位模式加法，低 16 bit 保留。 |
+| `08h` | `SUB Rd, Ra, Rb` | 1 | 无符号位模式减法，低 16 bit 保留。 |
+| `09h` | `AND Rd, Ra, Rb` | 1 | 按位与。 |
+| `0Ah` | `OR Rd, Ra, Rb` | 1 | 按位或。 |
+| `0Bh` | `XOR Rd, Ra, Rb` | 1 | 按位异或。 |
+| `0Ch` | `SHL Rd, Ra, Rb` | 1 | 左移 `Rb & 0Fh` 位。 |
+| `0Dh` | `SHR Rd, Ra, Rb` | 1 | 逻辑右移 `Rb & 0Fh` 位。 |
+| `0Eh` | `SAR Rd, Ra, Rb` | 1 | 将 `Ra` 视为有符号数算术右移 `Rb & 0Fh` 位。 |
+| `0Fh` | `BEQ Ra, Rb, rel16` | 2 | 两寄存器相等时跳转。 |
+| `10h` | `BNE Ra, Rb, rel16` | 2 | 两寄存器不等时跳转。 |
+| `11h` | `JMP Ra` | 1 | `PC = Ra`，`SG` 不变。 |
+| `12h` | `CALL Ra` | 1 | 先压入返回 `PC`，再 `PC = Ra`。 |
+| `13h` | `RET` | 1 | 弹出返回 `PC`。 |
+| `14h` | `PUSH Ra` | 1 | 压入 `Ra`。 |
+| `15h` | `POP Rd` | 1 | 弹出一个字到 `Rd`。 |
+| `16h` | `IN Rd, port16` | 2 | 从 16-bit I/O 端口读取一个字。未映射端口返回零。 |
+| `17h` | `OUT port16, Ra` | 2 | 将 `Ra` 写入 16-bit I/O 端口。未映射端口忽略写入。 |
+| `18h` | `RDSG Rd` | 1 | 零扩展读取 `SG`。 |
+| `19h` | `WRSG Ra` | 1 | `SG = Ra & 003Fh`。 |
+| `1Ah` | `WSGI imm16` | 2 | `SG = imm16 & 003Fh`。 |
+| `1Bh` | `EI` | 1 | 置位 `SR.IE`。 |
+| `1Ch` | `DI` | 1 | 清除 `SR.IE`。 |
+| `1Dh` | `HALT` | 1 | 停止取指，直到可接收的中断进入。 |
+| `1Eh` | `IRET` | 1 | 按 `SG`、`SR`、`PC` 的顺序弹出中断帧并恢复。 |
 
 ## 4. EXT 扩展编码
 
-`opcode=31` 是扩展前缀，不采用基础指令的寄存器字段：
+`opcode=1Fh` 是扩展前缀，不采用基础指令的寄存器字段：
 
 ```text
 15          11 10                                      0
 +--------------+-----------------------------------------+
-|  11111b      |             selector (0-2047)           |
+|  11111b      |            selector (000h-7FFh)         |
 +--------------+-----------------------------------------+
 ```
 
-当前 selector 是 `0-19`。除非下文另有定义，寄存器描述字采用 `Rd/Ra/Rb/00` 布局。未知 selector 是 `IllegalOpcode` 故障。
+当前 selector 是 `000h-013h`。除非下文另有定义，寄存器描述字采用 `Rd/Ra/Rb/00` 布局。未知 selector 是 `IllegalOpcode` 故障。
 
 ### 4.1 比较与控制流
 
-`EXT 0` 是三字的扩展比较分支。其寄存器描述字的 `Rd` 字段是条件码，`Ra/Rb` 是操作数，随后为 `rel16`。
+`EXT 000h` 是三字的扩展比较分支。其寄存器描述字的 `Rd` 字段是条件码，`Ra/Rb` 是操作数，随后为 `rel16`。
 
 | 条件码 | 助记符 | 条件 |
 |---:|---|---|
-| 0 | `BLT Ra, Rb, rel16` | `(short)Ra < (short)Rb` |
-| 1 | `BGE Ra, Rb, rel16` | `(short)Ra >= (short)Rb` |
-| 2 | `BLO Ra, Rb, rel16` | `Ra < Rb`，无符号比较 |
-| 3 | `BHS Ra, Rb, rel16` | `Ra >= Rb`，无符号比较 |
-| 4 | `BLE Ra, Rb, rel16` | `(short)Ra <= (short)Rb` |
-| 5 | `BGT Ra, Rb, rel16` | `(short)Ra > (short)Rb` |
+| `0h` | `BLT Ra, Rb, rel16` | `(short)Ra < (short)Rb` |
+| `1h` | `BGE Ra, Rb, rel16` | `(short)Ra >= (short)Rb` |
+| `2h` | `BLO Ra, Rb, rel16` | `Ra < Rb`，无符号比较 |
+| `3h` | `BHS Ra, Rb, rel16` | `Ra >= Rb`，无符号比较 |
+| `4h` | `BLE Ra, Rb, rel16` | `(short)Ra <= (short)Rb` |
+| `5h` | `BGT Ra, Rb, rel16` | `(short)Ra > (short)Rb` |
 
-`BEQ/BNE` 仍是更短的两字相等比较分支。OPEN1620 没有隐式算术标志位；比较分支直接读取寄存器，避免 `SR` 被普通算术指令污染。
+`BEQ/BNE` 仍是更短的两字相等比较分支。Open16A 没有隐式算术标志位；比较分支直接读取寄存器，避免 `SR` 被普通算术指令污染。
 
 | selector | 助记符 | 字数 | 语义 |
 |---:|---|---:|---|
-| 1 | `JMPA addr16` | 2 | `PC = addr16`，`SG` 不变。 |
-| 2 | `CALLA addr16` | 2 | 压入返回 `PC` 后，`PC = addr16`，`SG` 不变。 |
-| 3 | `JMPL p20` | 3 | 直接跳往 20-bit 物理目标。`SG = p20 >> 14`，`PC = C000h | (p20 & 3FFFh)`。 |
-| 4 | `CALLL p20` | 3 | 先压入当前 `SG`，再压入返回 `PC`，然后执行 `JMPL` 的目标转换。 |
-| 5 | `RETL` | 1 | 先弹出返回 `PC`，再弹出旧 `SG`。必须与 `CALLL` 配对。 |
+| `001h` | `JMPA addr16` | 2 | `PC = addr16`，`SG` 不变。 |
+| `002h` | `CALLA addr16` | 2 | 压入返回 `PC` 后，`PC = addr16`，`SG` 不变。 |
+| `003h` | `JMPL p20` | 3 | 直接跳往 20-bit 物理目标。`SG = p20 >> 14`，`PC = C000h | (p20 & 3FFFh)`。 |
+| `004h` | `CALLL p20` | 3 | 先压入当前 `SG`，再压入返回 `PC`，然后执行 `JMPL` 的目标转换。 |
+| `005h` | `RETL` | 1 | 先弹出返回 `PC`，再弹出旧 `SG`。必须与 `CALLL` 配对。 |
 
 `p20` 由两个额外字表示：低 16 bit 在前，随后一字的低 4 bit 是地址的 bit 16-19。该字的高 12 bit 必须为零，否则触发 `ReservedBits` 故障。
 
@@ -118,11 +118,11 @@ OPEN1620 是一台以 16-bit 字为基本运算单位的机器。寄存器、普
 
 | selector | 助记符 | 语义 |
 |---:|---|---|
-| 6 | `LDBS Rd, [p20]` | 从物理地址读字节并符号扩展。 |
-| 7 | `LDBU Rd, [p20]` | 从物理地址读字节并零扩展。 |
-| 8 | `LDW Rd, [p20]` | 从物理地址读一个 little-endian 字。 |
-| 9 | `LSTB Rs, [p20]` | 向物理地址写 `Rs` 的低字节。 |
-| 10 | `LSTW Rs, [p20]` | 向物理地址写一个 little-endian 字。 |
+| `006h` | `LDBS Rd, [p20]` | 从物理地址读字节并符号扩展。 |
+| `007h` | `LDBU Rd, [p20]` | 从物理地址读字节并零扩展。 |
+| `008h` | `LDW Rd, [p20]` | 从物理地址读一个 little-endian 字。 |
+| `009h` | `LSTB Rs, [p20]` | 向物理地址写 `Rs` 的低字节。 |
+| `00Ah` | `LSTW Rs, [p20]` | 向物理地址写一个 little-endian 字。 |
 
 这些操作不会改动 `PC`、`SG` 或栈。对 system ROM 范围的写入与其他内存写入一致，会被忽略。
 
@@ -132,19 +132,19 @@ OPEN1620 是一台以 16-bit 字为基本运算单位的机器。寄存器、普
 
 | selector | 助记符 | 语义 |
 |---:|---|---|
-| 11 | `MUL Rd, Ra, Rb` | 有符号乘法，结果的低 16 bit 写入 `Rd`。 |
-| 12 | `DIV Rd, Ra, Rb` | 有符号除法，向零截断。除数为零触发 `DivisionByZero`。 |
-| 13 | `DIVU Rd, Ra, Rb` | 无符号除法。除数为零触发 `DivisionByZero`。 |
-| 14 | `MOD Rd, Ra, Rb` | 有符号余数；余数符号随被除数。除数为零触发 `DivisionByZero`。 |
-| 15 | `MODU Rd, Ra, Rb` | 无符号余数。除数为零触发 `DivisionByZero`。 |
-| 16 | `NEG Rd, Ra` | 二补码取负。描述字的 `Rb` 必须为零。 |
-| 17 | `NOT Rd, Ra` | 逐位取反。描述字的 `Rb` 必须为零。 |
-| 18 | `ROL Rd, Ra, Rb` | 循环左移 `Rb & 0Fh` 位。 |
-| 19 | `ROR Rd, Ra, Rb` | 循环右移 `Rb & 0Fh` 位。 |
+| `00Bh` | `MUL Rd, Ra, Rb` | 有符号乘法，结果的低 16 bit 写入 `Rd`。 |
+| `00Ch` | `DIV Rd, Ra, Rb` | 有符号除法，向零截断。除数为零触发 `DivisionByZero`。 |
+| `00Dh` | `DIVU Rd, Ra, Rb` | 无符号除法。除数为零触发 `DivisionByZero`。 |
+| `00Eh` | `MOD Rd, Ra, Rb` | 有符号余数；余数符号随被除数。除数为零触发 `DivisionByZero`。 |
+| `00Fh` | `MODU Rd, Ra, Rb` | 无符号余数。除数为零触发 `DivisionByZero`。 |
+| `010h` | `NEG Rd, Ra` | 二补码取负。描述字的 `Rb` 必须为零。 |
+| `011h` | `NOT Rd, Ra` | 逐位取反。描述字的 `Rb` 必须为零。 |
+| `012h` | `ROL Rd, Ra, Rb` | 循环左移 `Rb & 0Fh` 位。 |
+| `013h` | `ROR Rd, Ra, Rb` | 循环右移 `Rb & 0Fh` 位。 |
 
 ## 5. 中断、故障与设备
 
-中断向量表从物理 `0010h` 开始，每个向量占一个 16-bit 处理程序逻辑地址。向量 `v` 的入口为 `[0010h + 2*v]`。CPU 接收中断时依次压入当前 `PC`、`SR`、`SG`，清除 `IE`，再把 `PC` 载入向量表项；`IRET` 执行相反恢复顺序。
+中断向量表从物理 `0010h` 开始，每个向量占一个 16-bit 处理程序逻辑地址。向量 `v` 的入口为 `[0010h + 2h*v]`。CPU 接收中断时依次压入当前 `PC`、`SR`、`SG`，清除 `IE`，再把 `PC` 载入向量表项；`IRET` 执行相反恢复顺序。
 
 - 视频完成中断向量：`10h`。
 - 键盘状态变化中断向量：`11h`。

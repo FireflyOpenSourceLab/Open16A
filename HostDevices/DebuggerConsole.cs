@@ -31,7 +31,7 @@ public sealed class DebuggerConsole : IDisposable
     public DebuggerConsole(Machine machine)
     {
         this.machine = machine ?? throw new ArgumentNullException(nameof(machine));
-        WriteLine("OPEN1620 host debugger. Type help.");
+        WriteLine("Open16A host debugger. Type help.");
     }
 
     public bool IsOpen { get; private set; }

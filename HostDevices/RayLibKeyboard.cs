@@ -4,7 +4,7 @@ using Raylib_cs;
 namespace OldSimulator.HostDevices;
 
 /// <summary>
-/// Host input adapter for the OPEN1620 compact 63-key matrix.
+/// Host input adapter for the Open16A compact 63-key matrix.
 /// F12 is deliberately omitted because it belongs to the host debugger.
 /// </summary>
 public sealed class RayLibKeyboard

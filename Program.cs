@@ -11,7 +11,7 @@ Raylib.SetConfigFlags(
     ConfigFlags.VSyncHint
 );
 
-Raylib.InitWindow(1024, 768, "The OPEN1620 Simulator");
+Raylib.InitWindow(1024, 768, "The Open16A Simulator");
 Raylib.SetWindowMinSize(min_window_width, min_window_height);
 const ulong cpu_hz = 16_934_400;
 

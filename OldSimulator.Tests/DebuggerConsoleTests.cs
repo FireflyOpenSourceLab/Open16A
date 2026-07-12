@@ -115,7 +115,7 @@ public sealed class DebuggerConsoleTests
     [Fact]
     public void LoadCopiesBinaryToPhysicalMemoryAndConfiguresAHighPageEntryPoint()
     {
-        string path = Path.Combine(Path.GetTempPath(), $"open1620 loader {Guid.NewGuid():N}.bin");
+        string path = Path.Combine(Path.GetTempPath(), $"open16a loader {Guid.NewGuid():N}.bin");
         File.WriteAllBytes(path, [0x00, 0xE8]); // HALT, little-endian
 
         try
@@ -145,7 +145,7 @@ public sealed class DebuggerConsoleTests
     [Fact]
     public void LoadRunStartsImmediatelyAndRefusesToOverwriteSystemRom()
     {
-        string path = Path.Combine(Path.GetTempPath(), $"open1620-loader-{Guid.NewGuid():N}.bin");
+        string path = Path.Combine(Path.GetTempPath(), $"open16a-loader-{Guid.NewGuid():N}.bin");
         File.WriteAllBytes(path, [0x00, 0xE8]);
 
         try
