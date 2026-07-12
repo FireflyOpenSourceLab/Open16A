@@ -28,7 +28,7 @@ public sealed class Machine
             KEYBOARD_INTERRUPT_VECTOR,
             Memory.CreatePhysicalView(KeyboardDevice.STATE_ADDRESS, KeyboardDevice.STATE_LENGTH));
 
-        Video.Attach(IoBus, presentPort: 0x20, statusPort: 0x21);
+        Video.Attach(IoBus, VideoDevice.PortPresent, VideoDevice.PortStatus);
         Character.Attach(IoBus);
     }
 

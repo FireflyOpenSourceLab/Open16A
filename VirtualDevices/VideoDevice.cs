@@ -28,6 +28,10 @@ public sealed class VideoDevice : IClockedDevice
 {
     public const int   VIDEO_RAM_LENGTH     = 0xC000;
     public const ulong DEFAULT_FRAME_CYCLES = 282_240;
+    public const ushort PortPresent      = 0x20;
+    public const ushort PortStatus       = 0x21;
+    public const ushort PortPaletteIndex = 0x22;
+    public const ushort PortPaletteData  = 0x23;
 
     private readonly InterruptController interrupts;
     private readonly byte                interruptVector;
@@ -41,6 +45,8 @@ public sealed class VideoDevice : IClockedDevice
 
     private ulong     cyclesUntilVBlank;
     private bool      presentPending;
+    private byte      paletteIndex;
+    private byte      paletteComponent;
     private VideoMode pendingMode;
     private Rgb24     pendingBackdrop;
     private Rgb24     displayedBackdrop;
@@ -66,6 +72,8 @@ public sealed class VideoDevice : IClockedDevice
         cyclesUntilVBlank    = frameCycles;
         CurrentMode          = VideoMode.Indexed256;
         WriteMode            = VideoMode.Indexed256;
+        LoadDefaultPalette();
+        palette.CopyTo(displayedPalette, 0);
         displayedBackdrop    = Backdrop;
     }
 
@@ -91,6 +99,10 @@ public sealed class VideoDevice : IClockedDevice
         ArgumentNullException.ThrowIfNull(ioBus);
         ioBus.RegisterWrite(presentPort, WritePresent);
         ioBus.RegisterRead(statusPort, ReadStatus);
+        ioBus.RegisterWrite(PortPaletteIndex, WritePaletteIndex);
+        ioBus.RegisterRead(PortPaletteIndex, () => paletteIndex);
+        ioBus.RegisterWrite(PortPaletteData, WritePaletteData);
+        ioBus.RegisterRead(PortPaletteData, ReadPaletteData);
     }
 
     public void SetPaletteEntry(byte index, Rgb24 color)
@@ -143,6 +155,73 @@ public sealed class VideoDevice : IClockedDevice
     }
 
     private ushort ReadStatus() => (ushort)Status;
+
+    private void WritePaletteIndex(ushort value)
+    {
+        paletteIndex = (byte)value;
+        paletteComponent = 0;
+    }
+
+    private void WritePaletteData(ushort value)
+    {
+        Rgb24 color = palette[paletteIndex];
+        palette[paletteIndex] = paletteComponent switch
+        {
+            0 => color with { Red = (byte)value },
+            1 => color with { Green = (byte)value },
+            _ => color with { Blue = (byte)value }
+        };
+        AdvancePaletteCursor();
+    }
+
+    private ushort ReadPaletteData()
+    {
+        Rgb24 color = palette[paletteIndex];
+        ushort value = paletteComponent switch
+        {
+            0 => color.Red,
+            1 => color.Green,
+            _ => color.Blue
+        };
+        AdvancePaletteCursor();
+        return value;
+    }
+
+    private void AdvancePaletteCursor()
+    {
+        paletteComponent++;
+        if (paletteComponent != 3)
+            return;
+
+        paletteComponent = 0;
+        paletteIndex++;
+    }
+
+    private void LoadDefaultPalette()
+    {
+        Rgb24[] ega =
+        [
+            new(0x00, 0x00, 0x00), new(0x00, 0x00, 0xAA),
+            new(0x00, 0xAA, 0x00), new(0x00, 0xAA, 0xAA),
+            new(0xAA, 0x00, 0x00), new(0xAA, 0x00, 0xAA),
+            new(0xAA, 0x55, 0x00), new(0xAA, 0xAA, 0xAA),
+            new(0x55, 0x55, 0x55), new(0x55, 0x55, 0xFF),
+            new(0x55, 0xFF, 0x55), new(0x55, 0xFF, 0xFF),
+            new(0xFF, 0x55, 0x55), new(0xFF, 0x55, 0xFF),
+            new(0xFF, 0xFF, 0x55), new(0xFF, 0xFF, 0xFF)
+        ];
+        ega.CopyTo(palette, 0);
+
+        byte[] levels = [0x00, 0x33, 0x66, 0x99, 0xCC, 0xFF];
+        var index = 0x10;
+        foreach (byte red in levels)
+        foreach (byte green in levels)
+        foreach (byte blue in levels)
+            palette[index++] = new Rgb24(red, green, blue);
+
+        for (var gray = 0x08; gray <= 0xEE; gray += 0x0A)
+            palette[index++] = new Rgb24((byte)gray, (byte)gray, (byte)gray);
+    }
 
     private void OnVBlank()
     {

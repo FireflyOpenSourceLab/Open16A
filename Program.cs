@@ -21,21 +21,6 @@ ulong cycleRemainder    = 0;
 var machine = new Machine();
 var debugger = new DebuggerConsole(machine);
 var keyboard = new RayLibKeyboard(machine.Keyboard);
-var randomVram = new byte[VideoDevice.VIDEO_RAM_LENGTH];
-Random.Shared.NextBytes(randomVram);
-machine.Memory.CreatePhysicalView(Machine.VIDEO_RAM_ADDRESS, VideoDevice.VIDEO_RAM_LENGTH).CopyFrom(randomVram);
-
-for (int i = 0; i < 4; i++)
-{
-    machine.Video.SetPaletteEntry(
-        (byte)i,
-        new Rgb24(
-            (byte)Random.Shared.Next(256),
-            (byte)Random.Shared.Next(256),
-            (byte)Random.Shared.Next(256)));
-}
-
-machine.IoBus.Write(0x20, (ushort)VideoMode.Indexed4);
 
 try
 {
