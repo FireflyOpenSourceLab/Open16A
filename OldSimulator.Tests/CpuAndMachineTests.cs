@@ -143,9 +143,121 @@ public sealed class CpuAndMachineTests
         Assert.Equal((ulong)1,                  machine.Video.FrameSerial);
     }
 
+    [Fact]
+    public void ExtendedBranchesAndDirectCallProvideCompleteIntegerControlFlow()
+    {
+        var memory = new Memory();
+        var cpu = new Cpu(memory, new IoBus());
+
+        WriteProgram(memory,
+                     Instruction(2, rd: 0), 0xFFFF,
+                     Instruction(2, rd: 1), 1,
+                     Extended(0), RegisterOperands(rd: 0, ra: 0, rb: 1), 2, // BLT R0, R1, +2 words
+                     Instruction(2, rd: 2), 0xDEAD,
+                     Instruction(2, rd: 2), 0xBEEF,
+                     Extended(2), 0x0340, // CALLA 0340h
+                     Instruction(29));
+        WriteProgramAt(memory,
+                       0x0340,
+                       Instruction(2, rd: 3), 0xCAFE,
+                       Instruction(19));
+
+        ExecuteUntilHalted(cpu);
+
+        Assert.Equal((ushort)0xBEEF, cpu.Registers[2]);
+        Assert.Equal((ushort)0xCAFE, cpu.Registers[3]);
+        Assert.Equal(Cpu.INITIAL_STACK_POINTER, cpu.SP);
+    }
+
+    [Fact]
+    public void ExtendedFarInstructionsAccessPhysicalMemoryAndRestoreTheCallerSegment()
+    {
+        var memory = new Memory();
+        var cpu = new Cpu(memory, new IoBus());
+        const uint target = 0x23456;
+        const uint data = 0xA4000;
+
+        memory.WritePhysical(data, 0xF0);
+        WriteProgram(memory,
+                     Instruction(26), 3, // WSGI 3
+                     Extended(4), (ushort)target, (ushort)(target >> 16), // LCALL 23456h
+                     Instruction(2, rd: 4), 0xBEEF,
+                     Extended(6), RegisterOperands(rd: 5), (ushort)data, (ushort)(data >> 16), // LDBS R5, A4000h
+                     Instruction(2, rd: 6), 0xCAFE,
+                     Extended(10), RegisterOperands(rd: 6), (ushort)(data + 2), (ushort)(data >> 16), // LSTW R6, A4002h
+                     Instruction(29));
+        WriteProgramAt(memory,
+                       target,
+                       Instruction(2, rd: 0), 0x1234,
+                       Extended(5)); // LRET
+
+        ExecuteUntilHalted(cpu);
+
+        Assert.Equal((ushort)0x1234, cpu.Registers[0]);
+        Assert.Equal((byte)3, cpu.SG);
+        Assert.Equal((ushort)0xBEEF, cpu.Registers[4]);
+        Assert.Equal((ushort)0xFFF0, cpu.Registers[5]);
+        Assert.Equal((ushort)0xCAFE, memory.ReadPhysicalWord(data + 2));
+        Assert.Equal(Cpu.INITIAL_STACK_POINTER, cpu.SP);
+    }
+
+    [Fact]
+    public void ExtendedIntegerOperationsHaveDefinedSignedAndUnsignedSemantics()
+    {
+        var memory = new Memory();
+        var cpu = new Cpu(memory, new IoBus());
+
+        WriteProgram(memory,
+                     Instruction(2, rd: 0), 0xFFF9, // -7
+                     Instruction(2, rd: 1), 3,
+                     Extended(11), RegisterOperands(rd: 2, ra: 0, rb: 1), // MUL
+                     Extended(12), RegisterOperands(rd: 3, ra: 0, rb: 1), // DIV
+                     Extended(13), RegisterOperands(rd: 4, ra: 0, rb: 1), // DIVU
+                     Extended(14), RegisterOperands(rd: 5, ra: 0, rb: 1), // MOD
+                     Extended(16), RegisterOperands(rd: 6, ra: 0),        // NEG
+                     Extended(18), RegisterOperands(rd: 7, ra: 1, rb: 1), // ROL
+                     Instruction(29));
+
+        ExecuteUntilHalted(cpu);
+
+        Assert.Equal((ushort)0xFFEB, cpu.Registers[2]);
+        Assert.Equal((ushort)0xFFFE, cpu.Registers[3]);
+        Assert.Equal((ushort)0x5553, cpu.Registers[4]);
+        Assert.Equal((ushort)0xFFFF, cpu.Registers[5]);
+        Assert.Equal((ushort)7, cpu.Registers[6]);
+        Assert.Equal((ushort)0x0018, cpu.Registers[7]);
+    }
+
+    [Fact]
+    public void DivisionByZeroFaultsTheExtendedInstruction()
+    {
+        var memory = new Memory();
+        var cpu = new Cpu(memory, new IoBus());
+        WriteProgram(memory,
+                     Instruction(2, rd: 0), 1,
+                     Instruction(2, rd: 1), 0,
+                     Extended(12), RegisterOperands(rd: 2, ra: 0, rb: 1));
+
+        for (var i = 0; i < 8 && !cpu.Halted; i++)
+            cpu.ExecuteNextInstruction();
+
+        Assert.Equal(CpuFaultCode.DivisionByZero, cpu.FaultCode);
+        Assert.Equal((ushort)0x0308, cpu.FaultingPc);
+    }
+
     private static ushort Instruction(int opcode, int rd = 0, int ra = 0, int rb = 0)
     {
         return (ushort)((opcode << 11) | (rd << 8) | (ra << 5) | (rb << 2));
+    }
+
+    private static ushort Extended(int operation)
+    {
+        return (ushort)((31 << 11) | operation);
+    }
+
+    private static ushort RegisterOperands(int rd = 0, int ra = 0, int rb = 0)
+    {
+        return (ushort)((rd << 8) | (ra << 5) | (rb << 2));
     }
 
     private static void WriteProgram(Memory memory, params ushort[] words)
@@ -153,7 +265,7 @@ public sealed class CpuAndMachineTests
         WriteProgramAt(memory, Cpu.INITIAL_PROGRAM_COUNTER, words);
     }
 
-    private static void WriteProgramAt(Memory memory, ushort address, params ushort[] words)
+    private static void WriteProgramAt(Memory memory, uint address, params ushort[] words)
     {
         uint current = address;
         foreach (ushort word in words)
