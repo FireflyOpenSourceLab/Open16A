@@ -17,6 +17,9 @@
     <Compile Remove="OldSimulator.Tests\**\*.cs"/>
     <EmbeddedResource Remove="OldSimulator.Tests\**\*"/>
     <None Remove="OldSimulator.Tests\**\*"/>
+    <Compile Remove="toolchains\**\*.cs"/>
+    <EmbeddedResource Remove="toolchains\**\*"/>
+    <None Remove="toolchains\**\*"/>
   </ItemGroup>
 
 </Project>

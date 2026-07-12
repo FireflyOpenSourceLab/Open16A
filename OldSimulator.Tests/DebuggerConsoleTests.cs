@@ -75,7 +75,8 @@ public sealed class DebuggerConsoleTests
         var console = new DebuggerConsole(new Machine());
 
         Assert.Contains("No breakpoint at F4000", console.Execute("clear F4000"));
-        Assert.Contains("Error:", console.Execute("mem not-an-address"));
+        console.Execute("mem not-an-address");
+        Assert.Contains(console.History, line => line.StartsWith("Error:", StringComparison.Ordinal));
         Assert.Contains("Unterminated", console.Execute("load \"unfinished"));
     }
 
@@ -87,7 +88,7 @@ public sealed class DebuggerConsoleTests
         var machine = new Machine(rom);
         var console = new DebuggerConsole(machine);
 
-        Assert.Contains("F4000 <- FF", console.Execute("poke F4000 FF"));
+        Assert.Contains("F4000 <- FF", console.Execute("poke F4000 FFh"));
         Assert.Equal((byte)0xFF, machine.Memory.ReadPhysical(0xF4000));
 
         Assert.Contains("Filled 4", console.Execute("fill F4010 4 7Eh"));

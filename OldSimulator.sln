@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OldSimulator", "OldSimulato
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OldSimulator.Tests", "OldSimulator.Tests\OldSimulator.Tests.csproj", "{03E2D4D5-7E2B-463C-9A7A-3C91D8F961D7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Open16A-ASM", "toolchains\Open16A-ASM\Open16A-ASM.csproj", "{C60B0F6F-8392-4B54-BA13-9B7469BE1B92}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{03E2D4D5-7E2B-463C-9A7A-3C91D8F961D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{03E2D4D5-7E2B-463C-9A7A-3C91D8F961D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{03E2D4D5-7E2B-463C-9A7A-3C91D8F961D7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C60B0F6F-8392-4B54-BA13-9B7469BE1B92}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C60B0F6F-8392-4B54-BA13-9B7469BE1B92}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C60B0F6F-8392-4B54-BA13-9B7469BE1B92}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C60B0F6F-8392-4B54-BA13-9B7469BE1B92}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

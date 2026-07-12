@@ -70,7 +70,7 @@ public sealed class CpuAndMachineTests
     {
         var memory = new Memory();
         var cpu    = new Cpu(memory, new IoBus());
-        memory.WriteLogicalWord(Cpu.INITIAL_PROGRAM_COUNTER, 0, Instruction(31));
+        memory.WriteLogicalWord(Cpu.INITIAL_PROGRAM_COUNTER, 0, (ushort)(Instruction(31) | 0x14));
 
         cpu.ExecuteNextInstruction();
 
@@ -196,11 +196,11 @@ public sealed class CpuAndMachineTests
         memory.WritePhysical(data, 0xF0);
         WriteProgram(memory,
                      Instruction(26), 3, // WSGI 3
-                     Extended(4), (ushort)target, (ushort)(target >> 16), // LCALL 23456h
+                     Extended(4), unchecked((ushort)target), (ushort)(target >> 16), // LCALL 23456h
                      Instruction(2, rd: 4), 0xBEEF,
-                     Extended(6), RegisterOperands(rd: 5), (ushort)data, (ushort)(data >> 16), // LDBS R5, A4000h
+                     Extended(6), RegisterOperands(rd: 5), unchecked((ushort)data), (ushort)(data >> 16), // LDBS R5, A4000h
                      Instruction(2, rd: 6), 0xCAFE,
-                     Extended(10), RegisterOperands(rd: 6), (ushort)(data + 2), (ushort)(data >> 16), // LSTW R6, A4002h
+                     Extended(10), RegisterOperands(rd: 6), unchecked((ushort)(data + 2)), (ushort)(data >> 16), // LSTW R6, A4002h
                      Instruction(29));
         WriteProgramAt(memory,
                        target,
