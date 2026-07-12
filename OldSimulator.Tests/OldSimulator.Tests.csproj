@@ -16,5 +16,6 @@
     <ProjectReference Include="..\OldSimulator.csproj"/>
     <ProjectReference Include="..\toolchains\Open16A-ASM\Open16A-ASM.csproj"/>
     <ProjectReference Include="..\toolchains\Open16A-LSP\Open16A-LSP.csproj"/>
+    <ProjectReference Include="..\toolchains\Open16A-LD\Open16A-LD.csproj"/>
   </ItemGroup>
 </Project>
