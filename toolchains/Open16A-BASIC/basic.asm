@@ -75,8 +75,7 @@ input_wait:
     jmpa input_loop
 
 submit_input:
-    li r0, 000ah
-    calla putc
+    calla newline
     calla execute_direct
     jmpa ready
 
@@ -238,8 +237,7 @@ print_string:
     sub r5, r5, r3
     jmpa print_string
 print_newline:
-    li r0, 000ah
-    calla putc
+    calla newline
     jmpa run_token
 print_integer_literal:
     ld.w r0, [r1]
@@ -498,9 +496,21 @@ puts:
     beq r0, r2, puts_done
     li r2, 1
     add r1, r1, r2
+    li r2, 000ah
+    bne r0, r2, puts_character
+    calla newline
+    jmpa puts
+puts_character:
     calla putc
     jmpa puts
 puts_done:
+    ret
+
+newline:
+    li r0, 000dh
+    calla putc
+    li r0, 000ah
+    calla putc
     ret
 
 keyboard_interrupt:
