@@ -67,7 +67,8 @@ public static class BasicTokenizer
         ["ABS"] = 0xA3, ["INT"] = 0xA4, ["SGN"] = 0xA5, ["LEN"] = 0xA6,
         ["LEFT$"] = 0xA7, ["RIGHT$"] = 0xA8, ["MID$"] = 0xA9, ["CHR$"] = 0xAA,
         ["STR$"] = 0xAB, ["VAL"] = 0xAC, ["AND"] = 0xAD, ["OR"] = 0xAE,
-        ["NOT"] = 0xAF, ["RUN"] = 0xB0, ["LIST"] = 0xB1, ["NEW"] = 0xB2
+        ["NOT"] = 0xAF, ["RUN"] = 0xB0, ["LIST"] = 0xB1, ["NEW"] = 0xB2,
+        ["PEEK"] = 0xB3, ["POKE"] = 0xB4, ["ELSE"] = 0xB5
     };
 
     public static BasicProgramImage ParseProgram(string source, bool autoRun = false)

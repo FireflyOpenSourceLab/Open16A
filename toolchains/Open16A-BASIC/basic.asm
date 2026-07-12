@@ -5,7 +5,6 @@
 
 entry:
     li r0, 0
-    out 0020h, r0
     out 0037h, r0
     li r0, keyboard_interrupt
     li r1, 0032h
@@ -20,6 +19,8 @@ entry:
 ready:
     li r1, ready_text
     calla puts
+    li r0, 0
+    out 0020h, r0
     li r0, 0
     li r1, input_length
     st.b r0, [r1]
@@ -68,6 +69,8 @@ select_key:
     jmpa input_loop
 
 input_wait:
+    li r0, 0
+    out 0020h, r0
     halt
     jmpa input_loop
 
@@ -190,6 +193,12 @@ run_token:
     beq r0, r3, run_print
     li r3, 0090h
     beq r0, r3, run_let
+    li r3, 0093h
+    beq r0, r3, run_if
+    li r3, 0095h
+    beq r0, r3, run_goto
+    li r3, 00b4h
+    beq r0, r3, run_poke
     li r3, 00a0h
     beq r0, r3, run_cls
     li r3, 009ch
@@ -211,6 +220,8 @@ run_print:
     beq r0, r3, print_integer_literal
     li r3, 0084h
     beq r0, r3, print_integer_variable
+    li r3, 00b3h
+    beq r0, r3, print_peek
     jmpa run_syntax
 print_string_begin:
     ld.bu r5, [r1]
@@ -252,6 +263,22 @@ print_integer_variable:
     ld.w r0, [r6]
     calla print_integer
     jmpa print_newline
+print_peek:
+    ld.bu r3, [r1]
+    li r5, 1
+    add r1, r1, r5
+    li r5, 0028h
+    bne r3, r5, run_syntax
+    calla read_integer
+    mov r5, r0
+    ld.bu r3, [r1]
+    li r6, 1
+    add r1, r1, r6
+    li r6, 0029h
+    bne r3, r6, run_syntax
+    ld.bu r0, [r5]
+    calla print_integer
+    jmpa print_newline
 
 run_let:
     ld.bu r0, [r1]
@@ -259,20 +286,15 @@ run_let:
     add r1, r1, r3
     li r3, 0084h
     bne r0, r3, run_syntax
-    mov r5, r0
+    ld.bu r5, [r1]
+    li r3, 1
+    add r1, r1, r3
     ld.bu r0, [r1]
     li r3, 1
     add r1, r1, r3
     li r3, 003dh
     bne r0, r3, run_syntax
-    ld.bu r0, [r1]
-    li r3, 1
-    add r1, r1, r3
-    li r3, 0082h
-    bne r0, r3, run_syntax
-    ld.w r0, [r1]
-    li r3, 2
-    add r1, r1, r3
+    calla read_integer
     li r3, 0040h
     and r3, r3, r5
     li r6, 0040h
@@ -284,6 +306,124 @@ run_let:
     add r6, r6, r5
     st.w r0, [r6]
     jmpa run_token
+
+run_goto:
+    calla read_integer
+    jmpa goto_line
+
+run_poke:
+    calla read_integer
+    mov r5, r0
+    ld.bu r3, [r1]
+    li r6, 1
+    add r1, r1, r6
+    li r6, 002ch
+    bne r3, r6, run_syntax
+    calla read_integer
+    st.b r0, [r5]
+    jmpa run_token
+
+run_if:
+    calla read_integer
+    mov r5, r0
+    ld.bu r7, [r1]
+    li r3, 1
+    add r1, r1, r3
+    calla read_integer
+    mov r6, r0
+    li r3, 003dh
+    beq r7, r3, if_equal
+    li r3, 003ch
+    beq r7, r3, if_less
+    li r3, 003eh
+    beq r7, r3, if_greater
+    jmpa run_syntax
+if_equal:
+    beq r5, r6, if_true
+    jmpa if_false
+if_less:
+    blt r5, r6, if_true
+    jmpa if_false
+if_greater:
+    bgt r5, r6, if_true
+    jmpa if_false
+if_true:
+    ld.bu r3, [r1]
+    li r6, 1
+    add r1, r1, r6
+    li r6, 0094h
+    bne r3, r6, run_syntax
+    calla read_integer
+    jmpa goto_line
+if_false:
+    ld.bu r3, [r1]
+    li r6, 1
+    add r1, r1, r6
+    li r6, 0094h
+    bne r3, r6, run_syntax
+    calla read_integer
+    ld.bu r3, [r1]
+    li r6, 00b5h
+    bne r3, r6, run_token
+    li r6, 1
+    add r1, r1, r6
+    calla read_integer
+    jmpa goto_line
+
+; R0 is a target line. R2 remains the program end address.
+goto_line:
+    mov r5, r0
+    li r1, 400ah
+goto_line_scan:
+    beq r1, r2, run_syntax
+    ld.w r3, [r1]
+    beq r3, r5, goto_line_found
+    ld.w r3, [r1 + 2]
+    li r0, 4
+    add r1, r1, r0
+    add r1, r1, r3
+    jmpa goto_line_scan
+goto_line_found:
+    jmpa run_line
+
+; Reads an INT16 literal or A%-Z% at R1, advances R1, returns it in R0.
+; Invalid tokens return zero; statement-level validation handles their context.
+read_integer:
+    ld.bu r0, [r1]
+    li r3, 1
+    add r1, r1, r3
+    li r3, 0082h
+    beq r0, r3, read_integer_literal
+    li r3, 002dh
+    beq r0, r3, read_integer_negative
+    li r3, 0084h
+    bne r0, r3, read_integer_invalid
+    ld.bu r5, [r1]
+    li r3, 1
+    add r1, r1, r3
+    li r3, 0040h
+    and r3, r3, r5
+    li r6, 0040h
+    bne r3, r6, read_integer_invalid
+    li r6, 001fh
+    and r5, r5, r6
+    add r5, r5, r5
+    li r6, integer_vars
+    add r6, r6, r5
+    ld.w r0, [r6]
+    ret
+read_integer_literal:
+    ld.w r0, [r1]
+    li r3, 2
+    add r1, r1, r3
+    ret
+read_integer_negative:
+    calla read_integer
+    neg r0, r0
+    ret
+read_integer_invalid:
+    li r0, 0
+    ret
 
 run_cls:
     li r0, 0
