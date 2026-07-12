@@ -1,0 +1,71 @@
+{
+  "name": "open16a-asm",
+  "displayName": "Open16A Assembly",
+  "description": "Language support for Open16A assembly.",
+  "version": "0.1.0",
+  "publisher": "open16a",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:open16a",
+    "onCommand:open16a.restartLanguageServer"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "open16a",
+        "aliases": ["Open16A Assembly", "Open16A ASM"],
+        "extensions": [".o16a", ".asm"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "open16a",
+        "scopeName": "source.open16a",
+        "path": "./syntaxes/open16a.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "open16a.restartLanguageServer",
+        "title": "Open16A: Restart Language Server"
+      }
+    ],
+    "configuration": {
+      "title": "Open16A",
+      "properties": {
+        "open16a.languageServer.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Open16A-LSP.dll. When empty, the extension searches the workspace and OPEN16A_LSP_PATH."
+        },
+        "open16a.languageServer.dotnetPath": {
+          "type": "string",
+          "default": "dotnet",
+          "description": "Command or absolute path used to run Open16A-LSP.dll."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc --noEmit -p . && esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=out/extension.js --sourcemap",
+    "watch": "tsc -watch -p .",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^3.2.2",
+    "esbuild": "^0.25.0",
+    "vscode-languageclient": "^9.0.1",
+    "typescript": "^5.7.2"
+  }
+}

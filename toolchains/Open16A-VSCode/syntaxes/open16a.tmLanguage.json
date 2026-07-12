@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Open16A Assembly",
+  "scopeName": "source.open16a",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#labels" },
+    { "include": "#directives" },
+    { "include": "#instructions" },
+    { "include": "#registers" },
+    { "include": "#numbers" },
+    { "include": "#strings" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.semicolon.open16a", "match": ";.*$" },
+        { "name": "comment.line.double-slash.open16a", "match": "//.*$" }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        { "name": "entity.name.function.label.open16a", "match": "(?i)\\b[A-Z_.][A-Z0-9_.]*(?=:)" }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        { "name": "keyword.control.directive.open16a", "match": "(?i)\\.(org|byte|word)\\b" }
+      ]
+    },
+    "instructions": {
+      "patterns": [
+        { "name": "keyword.instruction.open16a", "match": "(?i)\\b(NOP|MOV|LI|LD\\.BU|LD\\.W|ST\\.B|ST\\.W|ADD|SUB|AND|OR|XOR|SHL|SHR|SAR|BEQ|BNE|JMP|CALL|RET|PUSH|POP|IN|OUT|RDSG|WRSG|WSGI|EI|DI|HALT|IRET|BLT|BGE|BLO|BHS|BLE|BGT|JMPA|CALLA|JMPL|CALLL|RETL|LDBS|LDBU|LDW|LSTB|LSTW|MUL|DIV|DIVU|MOD|MODU|NEG|NOT|ROL|ROR)\\b" }
+      ]
+    },
+    "registers": {
+      "patterns": [
+        { "name": "variable.language.register.open16a", "match": "(?i)\\b(R[0-7]|FP[0-3]|PC|SG)\\b" }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.hex.open16a", "match": "(?i)\\b(?:0x[0-9a-f]+|[0-9a-f]+h)\\b" },
+        { "name": "constant.numeric.decimal.open16a", "match": "\\b[0-9]+\\b" }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "name": "string.quoted.single.open16a", "match": "'(?:[^'\\\\]|\\\\.)*'" }
+      ]
+    }
+  }
+}
