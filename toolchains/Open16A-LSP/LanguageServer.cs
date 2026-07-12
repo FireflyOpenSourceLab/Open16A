@@ -115,7 +115,13 @@ public sealed class LanguageServer
             kind = 6,
             detail = "16-bit general-purpose register"
         });
-        return new { isIncomplete = false, items = instructions.Concat(directives).Concat(registers) };
+        IEnumerable<object> floatingPointRegisters = Enumerable.Range(0, 8).Select(index => new
+        {
+            label = $"FP{index}",
+            kind = 6,
+            detail = "32-bit floating-point register"
+        });
+        return new { isIncomplete = false, items = instructions.Concat(directives).Concat(registers).Concat(floatingPointRegisters) };
     }
 
     private object? Hover(JsonElement parameters)

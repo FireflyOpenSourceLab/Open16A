@@ -29,6 +29,8 @@ public sealed class LanguageDocument
         "BEQ", "BNE", "JMP", "CALL", "RET", "PUSH", "POP", "IN", "OUT", "RDSG", "WRSG", "WSGI", "EI", "DI", "HALT", "IRET",
         "BLT", "BGE", "BLO", "BHS", "BLE", "BGT", "JMPA", "CALLA", "JMPL", "CALLL", "RETL", "LDBS", "LDBU", "LDW", "LSTB", "LSTW",
         "MUL", "DIV", "DIVU", "MOD", "MODU", "NEG", "NOT", "ROL", "ROR"
+        , "FLI", "FMOV", "FLD", "FST", "FADD", "FSUB", "FMUL", "FDIV", "FNEG", "FABS", "FCMP"
+        , "IFPLI", "IFPADD", "IFPSUB", "IFPAND", "IFPOR", "IFPXOR", "IFPNOT", "IFPSHL", "IFPSHR", "IFPSAR", "IFPROL", "IFPROR"
     ];
 
     public LanguageDocument(string uri, string text)
@@ -79,6 +81,8 @@ public sealed class LanguageDocument
             return $"`{token.ToUpperInvariant()}` Open16A instruction.";
         if (token.Length == 2 && token[0] is 'R' or 'r' && token[1] is >= '0' and <= '7')
             return $"`{token.ToUpperInvariant()}` - 16-bit general-purpose register.";
+        if (token.Length == 3 && token[0] is 'F' or 'f' && token[1] is 'P' or 'p' && token[2] is >= '0' and <= '7')
+            return $"`{token.ToUpperInvariant()}` - 32-bit IEEE-754 / integer-overlay register.";
         if (Labels.TryGetValue(token, out LabelInfo? label))
             return $"`{label.Name}` - label at physical `{label.Address:X5}h`.";
         return null;
@@ -143,6 +147,11 @@ public sealed class LanguageDocument
                 or "JMPA" or "CALLA" or "MUL" or "DIV" or "DIVU" or "MOD" or "MODU" or "NEG" or "NOT" or "ROL" or "ROR" => 4,
             "BLT" or "BGE" or "BLO" or "BHS" or "BLE" or "BGT" or "JMPL" or "CALLL" => 6,
             "LDBS" or "LDBU" or "LDW" or "LSTB" or "LSTW" => 8,
+            "FLI" or "IFPLI" => 8,
+            "FLD" or "FST" => 6,
+            "FMOV" or "FADD" or "FSUB" or "FMUL" or "FDIV" or "FNEG" or "FABS" or "FCMP"
+                or "IFPADD" or "IFPSUB" or "IFPAND" or "IFPOR" or "IFPXOR" or "IFPNOT"
+                or "IFPSHL" or "IFPSHR" or "IFPSAR" or "IFPROL" or "IFPROR" => 4,
             _ => string.IsNullOrEmpty(mnemonic) ? 0 : 2
         };
     }

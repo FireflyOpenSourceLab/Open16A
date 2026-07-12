@@ -102,6 +102,11 @@ public sealed class Assembler
                 or "ROL" or "ROR" => 4,
             "BLT" or "BGE" or "BLO" or "BHS" or "BLE" or "BGT" or "JMPL" or "CALLL" => 6,
             "LDBS" or "LDBU" or "LDW" or "LSTB" or "LSTW" => 8,
+            "FLI" or "IFPLI" => 8,
+            "FLD" or "FST" => 6,
+            "FMOV" or "FADD" or "FSUB" or "FMUL" or "FDIV" or "FNEG" or "FABS" or "FCMP"
+                or "IFPADD" or "IFPSUB" or "IFPAND" or "IFPOR" or "IFPXOR" or "IFPNOT"
+                or "IFPSHL" or "IFPSHR" or "IFPSAR" or "IFPROL" or "IFPROR" => 4,
             _ => throw Error(line, $"Unknown instruction or directive '{mnemonic}'.")
         };
     }
@@ -179,6 +184,29 @@ public sealed class Assembler
             case "NOT": ExtendedRegisters(output, 17, op, line, true); break;
             case "ROL": ExtendedRegisters(output, 18, op, line); break;
             case "ROR": ExtendedRegisters(output, 19, op, line); break;
+            case "FLI": FloatingImmediate(output, 20, op, line, true); break;
+            case "FMOV": FloatingUnary(output, 21, op, line); break;
+            case "FLD": FloatingMemory(output, 22, op, line); break;
+            case "FST": FloatingMemory(output, 23, op, line); break;
+            case "FADD": FloatingRegisters(output, 24, op, line); break;
+            case "FSUB": FloatingRegisters(output, 25, op, line); break;
+            case "FMUL": FloatingRegisters(output, 26, op, line); break;
+            case "FDIV": FloatingRegisters(output, 27, op, line); break;
+            case "FNEG": FloatingUnary(output, 28, op, line); break;
+            case "FABS": FloatingUnary(output, 29, op, line); break;
+            case "FCMP": FloatingCompare(output, 30, op, line); break;
+            case "IFPADD": FloatingRegisters(output, 31, op, line); break;
+            case "IFPSUB": FloatingRegisters(output, 32, op, line); break;
+            case "IFPAND": FloatingRegisters(output, 33, op, line); break;
+            case "IFPOR": FloatingRegisters(output, 34, op, line); break;
+            case "IFPXOR": FloatingRegisters(output, 35, op, line); break;
+            case "IFPNOT": FloatingUnary(output, 36, op, line); break;
+            case "IFPSHL": FloatingRegisters(output, 37, op, line); break;
+            case "IFPSHR": FloatingRegisters(output, 38, op, line); break;
+            case "IFPSAR": FloatingRegisters(output, 39, op, line); break;
+            case "IFPROL": FloatingRegisters(output, 40, op, line); break;
+            case "IFPROR": FloatingRegisters(output, 41, op, line); break;
+            case "IFPLI": FloatingImmediate(output, 42, op, line, false); break;
             default: throw Error(line, $"Unknown instruction '{mnemonic}'.");
         }
     }
@@ -224,6 +252,43 @@ public sealed class Assembler
     {
         Extended(output, selector);
         Descriptor(output, Rd(op, line), Ra(op, line), unary ? 0 : Rb(op, line));
+    }
+
+    private void FloatingImmediate(List<byte> output, int selector, List<string> op, Line line, bool floating)
+    {
+        Extended(output, selector);
+        Descriptor(output, FloatingRegister(Operand(op, 0, line), line), 0, 0);
+        uint value = floating ? FloatBits(Operand(op, 1, line), line) : DwordValue(Value(op, 1, line), line);
+        Word(output, (ushort)(value >> 16));
+        Word(output, (ushort)value);
+    }
+
+    private void FloatingMemory(List<byte> output, int selector, List<string> op, Line line)
+    {
+        (int ra, long offset) = MemoryOperand(Operand(op, 1, line), line);
+        if (offset is < short.MinValue or > short.MaxValue)
+            throw Error(line, "Memory displacement must fit signed 16 bits.");
+        Extended(output, selector);
+        Descriptor(output, FloatingRegister(Operand(op, 0, line), line), ra, 0);
+        Word(output, unchecked((ushort)(short)offset));
+    }
+
+    private static void FloatingRegisters(List<byte> output, int selector, List<string> op, Line line)
+    {
+        Extended(output, selector);
+        Descriptor(output, FloatingRegister(Operand(op, 0, line), line), FloatingRegister(Operand(op, 1, line), line), FloatingRegister(Operand(op, 2, line), line));
+    }
+
+    private static void FloatingUnary(List<byte> output, int selector, List<string> op, Line line)
+    {
+        Extended(output, selector);
+        Descriptor(output, FloatingRegister(Operand(op, 0, line), line), FloatingRegister(Operand(op, 1, line), line), 0);
+    }
+
+    private static void FloatingCompare(List<byte> output, int selector, List<string> op, Line line)
+    {
+        Extended(output, selector);
+        Descriptor(output, Rd(op, line), FloatingRegister(Operand(op, 1, line), line), FloatingRegister(Operand(op, 2, line), line));
     }
 
     private static void Basic(List<byte> output, int opcode, int rd = 0, int ra = 0, int rb = 0) =>
@@ -309,6 +374,12 @@ public sealed class Assembler
         if (text.Length == 2 && text[0] is 'R' or 'r' && text[1] is >= '0' and <= '7') return text[1] - '0';
         throw Error(line, $"Expected R0-R7, got '{text}'.");
     }
+    private static int FloatingRegister(string text, Line line)
+    {
+        text = text.Trim();
+        if (text.Length == 3 && text[0] is 'F' or 'f' && text[1] is 'P' or 'p' && text[2] is >= '0' and <= '7') return text[2] - '0';
+        throw Error(line, $"Expected FP0-FP7, got '{text}'.");
+    }
 
     private static ushort WordValue(long value, Line line)
     {
@@ -319,6 +390,17 @@ public sealed class Assembler
     {
         if (value is < sbyte.MinValue or > byte.MaxValue) throw Error(line, "Value must fit a byte.");
         return unchecked((byte)value);
+    }
+    private static uint DwordValue(long value, Line line)
+    {
+        if (value is < int.MinValue or > uint.MaxValue) throw Error(line, "Value must fit a 32-bit word.");
+        return unchecked((uint)value);
+    }
+    private static uint FloatBits(string text, Line line)
+    {
+        if (!float.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float value))
+            throw Error(line, $"Invalid floating-point value '{text}'.");
+        return BitConverter.SingleToUInt32Bits(value);
     }
     private static uint Physical(long value, Line line)
     {

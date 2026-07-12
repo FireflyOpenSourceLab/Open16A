@@ -30,12 +30,12 @@
     },
     "instructions": {
       "patterns": [
-        { "name": "keyword.instruction.open16a", "match": "(?i)\\b(NOP|MOV|LI|LD\\.BU|LD\\.W|ST\\.B|ST\\.W|ADD|SUB|AND|OR|XOR|SHL|SHR|SAR|BEQ|BNE|JMP|CALL|RET|PUSH|POP|IN|OUT|RDSG|WRSG|WSGI|EI|DI|HALT|IRET|BLT|BGE|BLO|BHS|BLE|BGT|JMPA|CALLA|JMPL|CALLL|RETL|LDBS|LDBU|LDW|LSTB|LSTW|MUL|DIV|DIVU|MOD|MODU|NEG|NOT|ROL|ROR)\\b" }
+        { "name": "keyword.instruction.open16a", "match": "(?i)\\b(NOP|MOV|LI|LD\\.BU|LD\\.W|ST\\.B|ST\\.W|ADD|SUB|AND|OR|XOR|SHL|SHR|SAR|BEQ|BNE|JMP|CALL|RET|PUSH|POP|IN|OUT|RDSG|WRSG|WSGI|EI|DI|HALT|IRET|BLT|BGE|BLO|BHS|BLE|BGT|JMPA|CALLA|JMPL|CALLL|RETL|LDBS|LDBU|LDW|LSTB|LSTW|MUL|DIV|DIVU|MOD|MODU|NEG|NOT|ROL|ROR|FLI|FMOV|FLD|FST|FADD|FSUB|FMUL|FDIV|FNEG|FABS|FCMP|IFPLI|IFPADD|IFPSUB|IFPAND|IFPOR|IFPXOR|IFPNOT|IFPSHL|IFPSHR|IFPSAR|IFPROL|IFPROR)\\b" }
       ]
     },
     "registers": {
       "patterns": [
-        { "name": "variable.language.register.open16a", "match": "(?i)\\b(R[0-7]|FP[0-3]|PC|SG)\\b" }
+        { "name": "variable.language.register.open16a", "match": "(?i)\\b(R[0-7]|FP[0-7]|PC|SG)\\b" }
       ]
     },
     "numbers": {

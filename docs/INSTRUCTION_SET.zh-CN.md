@@ -5,7 +5,7 @@
 Open16A 是一台以 16-bit 字为基本运算单位的机器。寄存器、普通逻辑地址和 I/O 端口均为 16 bit；物理内存地址为 20 bit，空间为 `00000h-FFFFFh`。
 
 - `R0-R7`：8 个通用 16-bit 寄存器。`R0` 不是常量零寄存器。
-- `FP0-FP3`：4 个 32-bit 保留寄存器。当前没有浮点或 32-bit 专用指令，程序不可依赖其运算语义。
+- `FP0-FP7`：8 个 32-bit 寄存器。它们存储 IEEE-754 binary32 位模式，也可由 `IFP` 指令作为无符号 32-bit 整数使用。
 - `PC`：16-bit 逻辑程序计数器，指令必须从偶地址开始。
 - `SP`：16-bit 物理栈指针。复位为 `BFFFh`，栈向下增长。
 - `SG`：低 6 bit 有效的页寄存器。
@@ -85,7 +85,7 @@ Open16A 是一台以 16-bit 字为基本运算单位的机器。寄存器、普�
 +--------------+-----------------------------------------+
 ```
 
-当前 selector 是 `000h-013h`。除非下文另有定义，寄存器描述字采用 `Rd/Ra/Rb/00` 布局。未知 selector 是 `IllegalOpcode` 故障。
+当前 selector 是 `000h-02Ah`。除非下文另有定义，寄存器描述字采用 `Rd/Ra/Rb/00` 布局。未知 selector 是 `IllegalOpcode` 故障。
 
 ### 4.1 比较与控制流
 
@@ -141,6 +141,27 @@ Open16A 是一台以 16-bit 字为基本运算单位的机器。寄存器、普�
 | `011h` | `NOT Rd, Ra` | 逐位取反。描述字的 `Rb` 必须为零。 |
 | `012h` | `ROL Rd, Ra, Rb` | 循环左移 `Rb & 0Fh` 位。 |
 | `013h` | `ROR Rd, Ra, Rb` | 循环右移 `Rb & 0Fh` 位。 |
+
+### 4.4 32-bit 浮点与 IFP 覆盖层
+
+`FP0-FP7` 为 8 个 32-bit 寄存器。`FLI` 的常量是 IEEE-754 single；`FLD/FST` 在逻辑地址空间以 big-endian 读写连续四字节。浮点算术遵循 IEEE-754 binary32 行为，除以零产生无穷大或 NaN，不触发 `DivisionByZero` 故障。
+
+| selector | 助记符 | 字数 | 语义 |
+|---:|---|---:|---|
+| `014h` | `FLI FPd, f32` | 4 | 装入浮点字面量。 |
+| `015h` | `FMOV FPd, FPa` | 2 | 复制原始 32-bit 位模式。 |
+| `016h` | `FLD FPd, [Ra + disp16]` | 3 | 从逻辑内存读 32-bit big-endian 值。 |
+| `017h` | `FST FPs, [Ra + disp16]` | 3 | 向逻辑内存写 32-bit big-endian 值。 |
+| `018h-01Bh` | `FADD/FSUB/FMUL/FDIV FPd, FPa, FPb` | 2 | IEEE-754 单精度算术。 |
+| `01Ch` | `FNEG FPd, FPa` | 2 | 浮点取负。 |
+| `01Dh` | `FABS FPd, FPa` | 2 | 清除符号位。 |
+| `01Eh` | `FCMP Rd, FPa, FPb` | 2 | 小于=`FFFFh`，相等=`0000h`，大于=`0001h`，NaN=`8000h`。 |
+| `01Fh-023h` | `IFPADD/IFPSUB/IFPAND/IFPOR/IFPXOR FPd, FPa, FPb` | 2 | raw 32-bit 整数操作。 |
+| `024h` | `IFPNOT FPd, FPa` | 2 | 32-bit 按位取反。 |
+| `025h-029h` | `IFPSHL/IFPSHR/IFPSAR/IFPROL/IFPROR FPd, FPa, FPb` | 2 | 位数取 `FPb & 1Fh`。 |
+| `02Ah` | `IFPLI FPd, imm32` | 4 | 装入 raw 32-bit 常量。 |
+
+`FLI FP0, 1.5` 产生 `3FC00000h`；`IFPLI FP0, 3FC00000h` 产生相同位模式但不进行浮点解析。
 
 ## 5. 中断、故障与设备
 

@@ -31,7 +31,30 @@ public enum ExtendedOpcode : ushort
     Negate = 16,
     BitwiseNot = 17,
     RotateLeft = 18,
-    RotateRight = 19
+    RotateRight = 19,
+    FloatLoadImmediate = 20,
+    FloatMove = 21,
+    FloatLoad = 22,
+    FloatStore = 23,
+    FloatAdd = 24,
+    FloatSubtract = 25,
+    FloatMultiply = 26,
+    FloatDivide = 27,
+    FloatNegate = 28,
+    FloatAbsolute = 29,
+    FloatCompare = 30,
+    IntegerFloatAdd = 31,
+    IntegerFloatSubtract = 32,
+    IntegerFloatAnd = 33,
+    IntegerFloatOr = 34,
+    IntegerFloatXor = 35,
+    IntegerFloatNot = 36,
+    IntegerFloatShiftLeft = 37,
+    IntegerFloatShiftRight = 38,
+    IntegerFloatShiftRightArithmetic = 39,
+    IntegerFloatRotateLeft = 40,
+    IntegerFloatRotateRight = 41,
+    IntegerFloatLoadImmediate = 42
 }
 
 public sealed class Cpu
@@ -54,8 +77,7 @@ public sealed class Cpu
 
     public ushort[] Registers { get; } = new ushort[8];
 
-    // These registers are storage only until floating-point instructions are defined.
-    public uint[] FloatingPointRegisters { get; } = new uint[4];
+    public uint[] FloatingPointRegisters { get; } = new uint[8];
 
     public ushort PC { get; set; }
     public ushort SP { get; set; }
@@ -414,6 +436,81 @@ public sealed class Cpu
                 Registers[rightRotateDestination] = RotateRight(Registers[rightRotateSource], Registers[rightRotateAmount]);
                 return 2;
 
+            case ExtendedOpcode.FloatLoadImmediate:
+            case ExtendedOpcode.IntegerFloatLoadImmediate:
+                if (!TryFetchRegisterOperand(out int immediateFloatDestination, instructionAddress))
+                    return 1;
+                FloatingPointRegisters[immediateFloatDestination] = ((uint)fetchWord() << 16) | fetchWord();
+                return 4;
+
+            case ExtendedOpcode.FloatMove:
+                if (!TryFetchUnaryOperands(out int floatMoveDestination, out int floatMoveSource, instructionAddress))
+                    return 1;
+                FloatingPointRegisters[floatMoveDestination] = FloatingPointRegisters[floatMoveSource];
+                return 2;
+
+            case ExtendedOpcode.FloatLoad:
+                if (!TryFetchFloatingMemoryOperands(out int floatLoadDestination, out int floatLoadBase, out ushort floatLoadOffset, instructionAddress))
+                    return 1;
+                FloatingPointRegisters[floatLoadDestination] = ReadLogicalDword(addressWithOffset(Registers[floatLoadBase], floatLoadOffset));
+                return 3;
+
+            case ExtendedOpcode.FloatStore:
+                if (!TryFetchFloatingMemoryOperands(out int floatStoreSource, out int floatStoreBase, out ushort floatStoreOffset, instructionAddress))
+                    return 1;
+                WriteLogicalDword(addressWithOffset(Registers[floatStoreBase], floatStoreOffset), FloatingPointRegisters[floatStoreSource]);
+                return 3;
+
+            case ExtendedOpcode.FloatAdd:
+                return ExecuteFloatBinary((left, right) => left + right, instructionAddress);
+            case ExtendedOpcode.FloatSubtract:
+                return ExecuteFloatBinary((left, right) => left - right, instructionAddress);
+            case ExtendedOpcode.FloatMultiply:
+                return ExecuteFloatBinary((left, right) => left * right, instructionAddress);
+            case ExtendedOpcode.FloatDivide:
+                return ExecuteFloatBinary((left, right) => left / right, instructionAddress);
+            case ExtendedOpcode.FloatNegate:
+                if (!TryFetchUnaryOperands(out int floatNegateDestination, out int floatNegateSource, instructionAddress))
+                    return 1;
+                FloatingPointRegisters[floatNegateDestination] = FloatBits(-FloatValue(floatNegateSource));
+                return 2;
+            case ExtendedOpcode.FloatAbsolute:
+                if (!TryFetchUnaryOperands(out int floatAbsoluteDestination, out int floatAbsoluteSource, instructionAddress))
+                    return 1;
+                FloatingPointRegisters[floatAbsoluteDestination] = FloatingPointRegisters[floatAbsoluteSource] & 0x7FFF_FFFF;
+                return 2;
+            case ExtendedOpcode.FloatCompare:
+                if (!TryFetchRegisterOperands(out int floatCompareDestination, out int floatCompareLeft, out int floatCompareRight, instructionAddress))
+                    return 1;
+                Registers[floatCompareDestination] = FloatCompare(FloatValue(floatCompareLeft), FloatValue(floatCompareRight));
+                return 2;
+
+            case ExtendedOpcode.IntegerFloatAdd:
+                return ExecuteIntegerFloatBinary((left, right) => unchecked(left + right), instructionAddress);
+            case ExtendedOpcode.IntegerFloatSubtract:
+                return ExecuteIntegerFloatBinary((left, right) => unchecked(left - right), instructionAddress);
+            case ExtendedOpcode.IntegerFloatAnd:
+                return ExecuteIntegerFloatBinary((left, right) => left & right, instructionAddress);
+            case ExtendedOpcode.IntegerFloatOr:
+                return ExecuteIntegerFloatBinary((left, right) => left | right, instructionAddress);
+            case ExtendedOpcode.IntegerFloatXor:
+                return ExecuteIntegerFloatBinary((left, right) => left ^ right, instructionAddress);
+            case ExtendedOpcode.IntegerFloatNot:
+                if (!TryFetchUnaryOperands(out int integerFloatNotDestination, out int integerFloatNotSource, instructionAddress))
+                    return 1;
+                FloatingPointRegisters[integerFloatNotDestination] = ~FloatingPointRegisters[integerFloatNotSource];
+                return 2;
+            case ExtendedOpcode.IntegerFloatShiftLeft:
+                return ExecuteIntegerFloatBinary((left, right) => left << (int)(right & 31), instructionAddress);
+            case ExtendedOpcode.IntegerFloatShiftRight:
+                return ExecuteIntegerFloatBinary((left, right) => left >> (int)(right & 31), instructionAddress);
+            case ExtendedOpcode.IntegerFloatShiftRightArithmetic:
+                return ExecuteIntegerFloatBinary((left, right) => unchecked((uint)((int)left >> (int)(right & 31))), instructionAddress);
+            case ExtendedOpcode.IntegerFloatRotateLeft:
+                return ExecuteIntegerFloatBinary(RotateLeft, instructionAddress);
+            case ExtendedOpcode.IntegerFloatRotateRight:
+                return ExecuteIntegerFloatBinary(RotateRight, instructionAddress);
+
             default:
                 return fault(CpuFaultCode.IllegalOpcode, instructionAddress);
         }
@@ -452,6 +549,62 @@ public sealed class Cpu
 
         fault(CpuFaultCode.ReservedBits, instructionAddress);
         return false;
+    }
+
+    private bool TryFetchFloatingMemoryOperands(out int floatingRegister, out int addressRegister, out ushort offset, ushort instructionAddress)
+    {
+        if (!TryFetchRegisterOperands(out floatingRegister, out addressRegister, out int unused, instructionAddress))
+        {
+            offset = 0;
+            return false;
+        }
+        if (unused != 0)
+        {
+            offset = 0;
+            fault(CpuFaultCode.ReservedBits, instructionAddress);
+            return false;
+        }
+        offset = fetchWord();
+        return true;
+    }
+
+    private uint ReadLogicalDword(ushort address)
+    {
+        uint value = 0;
+        for (var offset = 0; offset < sizeof(uint); offset++)
+            value = (value << 8) | memory.ReadLogical(unchecked((ushort)(address + offset)), SG);
+        return value;
+    }
+
+    private void WriteLogicalDword(ushort address, uint value)
+    {
+        for (var offset = 0; offset < sizeof(uint); offset++)
+            memory.WriteLogical(unchecked((ushort)(address + offset)), SG, (byte)(value >> (24 - offset * 8)));
+    }
+
+    private float FloatValue(int register) => BitConverter.UInt32BitsToSingle(FloatingPointRegisters[register]);
+    private static uint FloatBits(float value) => BitConverter.SingleToUInt32Bits(value);
+
+    private static ushort FloatCompare(float left, float right)
+    {
+        if (float.IsNaN(left) || float.IsNaN(right)) return 0x8000;
+        return left < right ? (ushort)0xFFFF : left > right ? (ushort)1 : (ushort)0;
+    }
+
+    private ulong ExecuteFloatBinary(Func<float, float, float> operation, ushort instructionAddress)
+    {
+        if (!TryFetchRegisterOperands(out int destination, out int left, out int right, instructionAddress))
+            return 1;
+        FloatingPointRegisters[destination] = FloatBits(operation(FloatValue(left), FloatValue(right)));
+        return 2;
+    }
+
+    private ulong ExecuteIntegerFloatBinary(Func<uint, uint, uint> operation, ushort instructionAddress)
+    {
+        if (!TryFetchRegisterOperands(out int destination, out int left, out int right, instructionAddress))
+            return 1;
+        FloatingPointRegisters[destination] = operation(FloatingPointRegisters[left], FloatingPointRegisters[right]);
+        return 2;
     }
 
     private bool TryFetchPhysicalAddress(out uint address, ushort instructionAddress)
@@ -501,6 +654,18 @@ public sealed class Cpu
         return count == 0 ? value : (ushort)((value >> count) | (value << (16 - count)));
     }
 
+    private static uint RotateLeft(uint value, uint amount)
+    {
+        int count = (int)(amount & 31);
+        return count == 0 ? value : (value << count) | (value >> (32 - count));
+    }
+
+    private static uint RotateRight(uint value, uint amount)
+    {
+        int count = (int)(amount & 31);
+        return count == 0 ? value : (value >> count) | (value << (32 - count));
+    }
+
     private static ulong GetExtendedInstructionCost(ushort operation)
     {
         return (ExtendedOpcode)operation switch
@@ -512,8 +677,17 @@ public sealed class Cpu
             ExtendedOpcode.LongLoadByteSigned or ExtendedOpcode.LongLoadByteUnsigned or ExtendedOpcode.LongLoadWord
                 or ExtendedOpcode.LongStoreByte or ExtendedOpcode.LongStoreWord => 4,
             ExtendedOpcode.Multiply or ExtendedOpcode.DivideSigned or ExtendedOpcode.DivideUnsigned
-                or ExtendedOpcode.ModuloSigned or ExtendedOpcode.ModuloUnsigned or ExtendedOpcode.Negate
-                or ExtendedOpcode.BitwiseNot or ExtendedOpcode.RotateLeft or ExtendedOpcode.RotateRight => 2,
+            or ExtendedOpcode.ModuloSigned or ExtendedOpcode.ModuloUnsigned or ExtendedOpcode.Negate
+            or ExtendedOpcode.BitwiseNot or ExtendedOpcode.RotateLeft or ExtendedOpcode.RotateRight => 2,
+            ExtendedOpcode.FloatLoadImmediate or ExtendedOpcode.IntegerFloatLoadImmediate => 4,
+            ExtendedOpcode.FloatLoad or ExtendedOpcode.FloatStore => 3,
+            ExtendedOpcode.FloatMove or ExtendedOpcode.FloatAdd or ExtendedOpcode.FloatSubtract or ExtendedOpcode.FloatMultiply
+            or ExtendedOpcode.FloatDivide or ExtendedOpcode.FloatNegate or ExtendedOpcode.FloatAbsolute or ExtendedOpcode.FloatCompare
+            or ExtendedOpcode.IntegerFloatAdd or ExtendedOpcode.IntegerFloatSubtract or ExtendedOpcode.IntegerFloatAnd
+            or ExtendedOpcode.IntegerFloatOr or ExtendedOpcode.IntegerFloatXor or ExtendedOpcode.IntegerFloatNot
+            or ExtendedOpcode.IntegerFloatShiftLeft or ExtendedOpcode.IntegerFloatShiftRight
+            or ExtendedOpcode.IntegerFloatShiftRightArithmetic or ExtendedOpcode.IntegerFloatRotateLeft
+            or ExtendedOpcode.IntegerFloatRotateRight => 2,
             _ => 1
         };
     }

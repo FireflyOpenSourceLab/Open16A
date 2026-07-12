@@ -70,7 +70,7 @@ public sealed class CpuAndMachineTests
     {
         var memory = new Memory();
         var cpu    = new Cpu(memory, new IoBus());
-        memory.WriteLogicalWord(Cpu.INITIAL_PROGRAM_COUNTER, 0, (ushort)(Instruction(31) | 0x14));
+        memory.WriteLogicalWord(Cpu.INITIAL_PROGRAM_COUNTER, 0, (ushort)(Instruction(31) | 0x7FF));
 
         cpu.ExecuteNextInstruction();
 
@@ -259,6 +259,36 @@ public sealed class CpuAndMachineTests
 
         Assert.Equal(CpuFaultCode.DivisionByZero, cpu.FaultCode);
         Assert.Equal((ushort)0x0308, cpu.FaultingPc);
+    }
+
+    [Fact]
+    public void FloatingPointAndIntegerOverlayInstructionsUseEightFpRegisters()
+    {
+        var memory = new Memory();
+        var cpu = new Cpu(memory, new IoBus());
+        cpu.Registers[0] = 0x0400;
+
+        WriteProgram(memory,
+                     Extended(20), RegisterOperands(rd: 0), 0x3FC0, 0x0000,
+                     Extended(20), RegisterOperands(rd: 1), 0x4010, 0x0000,
+                     Extended(24), RegisterOperands(rd: 2, ra: 0, rb: 1),
+                     Extended(23), RegisterOperands(rd: 2, ra: 0), 0,
+                     Extended(22), RegisterOperands(rd: 6, ra: 0), 0,
+                     Extended(30), RegisterOperands(rd: 1, ra: 6, rb: 2),
+                     Extended(42), RegisterOperands(rd: 3), 0x8000, 0x0000,
+                     Extended(42), RegisterOperands(rd: 5), 0x0000, 0x0001,
+                     Extended(39), RegisterOperands(rd: 4, ra: 3, rb: 5),
+                     Instruction(29));
+
+        ExecuteUntilHalted(cpu);
+
+        Assert.Equal(8, cpu.FloatingPointRegisters.Length);
+        Assert.Equal(0x40700000u, cpu.FloatingPointRegisters[2]);
+        Assert.Equal(0x40700000u, cpu.FloatingPointRegisters[6]);
+        Assert.Equal((ushort)0, cpu.Registers[1]);
+        Assert.Equal(0xC0000000u, cpu.FloatingPointRegisters[4]);
+        Assert.Equal((byte)0x40, memory.ReadPhysical(0x0400));
+        Assert.Equal((byte)0x70, memory.ReadPhysical(0x0401));
     }
 
     private static ushort Instruction(int opcode, int rd = 0, int ra = 0, int rb = 0)

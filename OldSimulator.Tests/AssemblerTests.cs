@@ -89,4 +89,18 @@ public sealed class AssemblerTests
         Assert.StartsWith("Line 1:", label.Message);
         Assert.Contains("missing", label.Message);
     }
+
+    [Fact]
+    public void AssemblesIeeeFloatingPointAndIntegerOverlayInstructions()
+    {
+        AssemblyResult result = new Assembler().Assemble(".org 0300h\nFLI FP0, 1.5\nIFPLI FP1, 80000000h\nFADD FP2, FP0, FP1\n");
+
+        Assert.Equal(0x300u, result.Origin);
+        Assert.Equal(new byte[]
+        {
+            0xF8, 0x14, 0x00, 0x00, 0x3F, 0xC0, 0x00, 0x00,
+            0xF8, 0x2A, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00,
+            0xF8, 0x18, 0x02, 0x04
+        }, result.Bytes);
+    }
 }
