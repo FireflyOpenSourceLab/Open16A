@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Open16A-LSP", "toolchains\O
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Open16A-LD", "toolchains\Open16A-LD\Open16A-LD.csproj", "{4A1FBAC3-4C8E-42C2-85DF-8CA9DE1F749C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Open16A-BASIC-PACK", "toolchains\Open16A-BASIC-PACK\Open16A-BASIC-PACK.csproj", "{6B3B0B7F-746E-4A6E-B0BD-78D8C8CE2D67}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +38,9 @@ Global
 		{4A1FBAC3-4C8E-42C2-85DF-8CA9DE1F749C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4A1FBAC3-4C8E-42C2-85DF-8CA9DE1F749C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4A1FBAC3-4C8E-42C2-85DF-8CA9DE1F749C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6B3B0B7F-746E-4A6E-B0BD-78D8C8CE2D67}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6B3B0B7F-746E-4A6E-B0BD-78D8C8CE2D67}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6B3B0B7F-746E-4A6E-B0BD-78D8C8CE2D67}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6B3B0B7F-746E-4A6E-B0BD-78D8C8CE2D67}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

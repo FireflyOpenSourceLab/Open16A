@@ -26,7 +26,7 @@ public sealed class Machine
         Keyboard = new KeyboardDevice(
             Interrupts,
             KEYBOARD_INTERRUPT_VECTOR,
-            Memory.CreatePhysicalView(KeyboardDevice.STATE_ADDRESS, KeyboardDevice.STATE_LENGTH));
+            Memory.CreatePhysicalView(KeyboardDevice.STATE_ADDRESS, KeyboardDevice.DEVICE_MEMORY_LENGTH));
 
         Video.Attach(IoBus, VideoDevice.PortPresent, VideoDevice.PortStatus);
         Character.Attach(IoBus);

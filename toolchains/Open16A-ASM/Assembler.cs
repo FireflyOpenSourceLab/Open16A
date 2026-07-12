@@ -484,7 +484,9 @@ public sealed class Assembler
         }
         if (text.Length == 3 && text[0] == '\'' && text[2] == '\'') return text[1];
         if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) return Parse(text[2..], NumberStyles.AllowHexSpecifier, line);
-        if (text.EndsWith("h", StringComparison.OrdinalIgnoreCase)) return Parse(text[..^1], NumberStyles.AllowHexSpecifier, line);
+        if (text.EndsWith("h", StringComparison.OrdinalIgnoreCase)
+            && long.TryParse(text[..^1], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out long suffixHexValue))
+            return suffixHexValue;
         if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long decimalValue)) return decimalValue;
         if (labels.TryGetValue(text, out uint label)) return label;
         if (relocatable && externalSymbols.Contains(text)) return 0;
@@ -513,10 +515,14 @@ public sealed class Assembler
     private static int AddSubtract(string text)
     {
         bool character = false;
-        for (var index = 1; index < text.Length; index++)
+        for (var index = 0; index < text.Length; index++)
         {
-            if (text[index] == '\'') character = !character;
-            if (!character && text[index] is '+' or '-') return index;
+            if (text[index] == '\'')
+            {
+                character = !character;
+                continue;
+            }
+            if (index != 0 && !character && text[index] is '+' or '-') return index;
         }
         return -1;
     }

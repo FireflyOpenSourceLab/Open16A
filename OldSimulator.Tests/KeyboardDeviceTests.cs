@@ -79,6 +79,50 @@ public sealed class KeyboardDeviceTests
         Assert.True(machine.Cpu.InterruptsEnabled);
     }
 
+    [Fact]
+    public void TransitionsAreQueuedWithDownAndShiftFlags()
+    {
+        var fixture = new Fixture();
+
+        fixture.Keyboard.SetKeyState(0x2D, true);
+        fixture.Keyboard.SetKeyState(0x21, true);
+        fixture.Keyboard.SetKeyState(0x21, false);
+
+        Assert.Equal((byte)3, fixture.Memory.ReadPhysical(KeyboardDevice.EVENT_HEAD_ADDRESS));
+        Assert.Equal((byte)0, fixture.Memory.ReadPhysical(KeyboardDevice.EVENT_TAIL_ADDRESS));
+        Assert.Equal((byte)(0x2D | KeyboardDevice.EventDown | KeyboardDevice.EventShift), fixture.Memory.ReadPhysical(KeyboardDevice.EVENT_BUFFER_ADDRESS));
+        Assert.Equal((byte)(0x21 | KeyboardDevice.EventDown | KeyboardDevice.EventShift), fixture.Memory.ReadPhysical(KeyboardDevice.EVENT_BUFFER_ADDRESS + 1));
+        Assert.Equal((byte)(0x21 | KeyboardDevice.EventShift), fixture.Memory.ReadPhysical(KeyboardDevice.EVENT_BUFFER_ADDRESS + 2));
+    }
+
+    [Fact]
+    public void FullEventQueueSetsOverflowWithoutOverwritingUnreadEvents()
+    {
+        var fixture = new Fixture();
+        for (var index = 0; index < KeyboardDevice.EVENT_BUFFER_LENGTH - 1; index++)
+        {
+            fixture.Keyboard.SetKeyState((byte)(index % KeyboardDevice.EMPTY_SCAN_CODE), true);
+            fixture.Keyboard.SetKeyState((byte)(index % KeyboardDevice.EMPTY_SCAN_CODE), false);
+        }
+
+        Assert.NotEqual(0, fixture.Memory.ReadPhysical(KeyboardDevice.EVENT_FLAGS_ADDRESS) & KeyboardDevice.EVENT_OVERFLOW);
+        Assert.Equal((byte)(KeyboardDevice.EVENT_BUFFER_LENGTH - 1), fixture.Memory.ReadPhysical(KeyboardDevice.EVENT_HEAD_ADDRESS));
+    }
+
+    [Fact]
+    public void ClearAlsoResetsPendingEventsWhenNoKeyIsHeld()
+    {
+        var fixture = new Fixture();
+        fixture.Keyboard.SetKeyState(0x21, true);
+        fixture.Keyboard.SetKeyState(0x21, false);
+
+        fixture.Keyboard.Clear();
+
+        Assert.Equal((byte)0, fixture.Memory.ReadPhysical(KeyboardDevice.EVENT_HEAD_ADDRESS));
+        Assert.Equal((byte)0, fixture.Memory.ReadPhysical(KeyboardDevice.EVENT_TAIL_ADDRESS));
+        Assert.Equal((byte)0, fixture.Memory.ReadPhysical(KeyboardDevice.EVENT_FLAGS_ADDRESS));
+    }
+
     private sealed class Fixture
     {
         public Fixture()
@@ -88,7 +132,7 @@ public sealed class KeyboardDeviceTests
             Keyboard = new KeyboardDevice(
                 Interrupts,
                 Machine.KEYBOARD_INTERRUPT_VECTOR,
-                Memory.CreatePhysicalView(KeyboardDevice.STATE_ADDRESS, KeyboardDevice.STATE_LENGTH));
+                Memory.CreatePhysicalView(KeyboardDevice.STATE_ADDRESS, KeyboardDevice.DEVICE_MEMORY_LENGTH));
         }
 
         public Memory Memory { get; }

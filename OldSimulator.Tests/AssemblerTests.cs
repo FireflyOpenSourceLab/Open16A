@@ -91,6 +91,14 @@ public sealed class AssemblerTests
     }
 
     [Fact]
+    public void LabelsEndingInHAndCharacterOperatorsAreNotParsedAsExpressions()
+    {
+        AssemblyResult result = new Assembler().Assemble("input_length:\n.word input_length\n.byte '-', '+'\n");
+
+        Assert.Equal(new byte[] { 0x00, 0x00, 0x2D, 0x2B }, result.Bytes);
+    }
+
+    [Fact]
     public void AssemblesIeeeFloatingPointAndIntegerOverlayInstructions()
     {
         AssemblyResult result = new Assembler().Assemble(".org 0300h\nFLI FP0, 1.5\nIFPLI FP1, 80000000h\nFADD FP2, FP0, FP1\n");
