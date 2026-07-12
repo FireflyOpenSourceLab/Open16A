@@ -35,6 +35,7 @@ public sealed class RayLibScreen : IDisposable
         {
             texture = Raylib.LoadTextureFromImage(image);
             Raylib.SetTextureFilter(texture, TextureFilter.Point);
+            Raylib.SetTextureWrap(texture, TextureWrap.Clamp);
         }
         finally
         {
