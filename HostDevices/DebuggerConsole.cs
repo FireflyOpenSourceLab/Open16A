@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using Raylib_cs;
 using OldSimulator.VirtualDevices;
 
@@ -7,20 +8,24 @@ namespace OldSimulator.HostDevices;
 /// <summary>
 /// Host-side debugger. It is intentionally outside the emulated I/O and timing model.
 /// </summary>
-public sealed class DebuggerConsole
+public sealed class DebuggerConsole : IDisposable
 {
-    private const int PanelX = 16;
-    private const int PanelY = 16;
-    private const int PanelWidth = 700;
-    private const int PanelHeight = 520;
-    private const int FontSize = 18;
-    private const int LineHeight = 22;
+    private const int PanelMargin = 20;
+    private const int PanelMaximumWidth = 920;
+    private const int PanelMaximumHeight = 560;
+    private const int FontSize = 16;
+    private const int LineHeight = 21;
+    private const int PanelPadding = 16;
     private const int MaximumInputLength = 120;
     private const int MaximumHistoryLines = 19;
 
     private readonly Machine machine;
     private readonly List<string> history = [];
+    private Font font;
+    private bool ownsFont;
+    private bool fontLoaded;
     private string input = string.Empty;
+    private bool disposed;
 
     public DebuggerConsole(Machine machine)
     {
@@ -43,6 +48,8 @@ public sealed class DebuggerConsole
 
         if (!IsOpen)
             return;
+
+        EnsureFont();
 
         if (Raylib.IsKeyPressed(KeyboardKey.Escape))
         {
@@ -77,18 +84,36 @@ public sealed class DebuggerConsole
         if (!IsOpen)
             return;
 
-        Raylib.DrawRectangle(PanelX, PanelY, PanelWidth, PanelHeight, new Color(8, 12, 16, 238));
-        Raylib.DrawRectangleLines(PanelX, PanelY, PanelWidth, PanelHeight, new Color(72, 212, 175, 255));
-        Raylib.DrawText("HOST DEBUGGER  F12 close", PanelX + 12, PanelY + 10, FontSize, new Color(72, 212, 175, 255));
+        int panelWidth = Math.Min(PanelMaximumWidth, Raylib.GetScreenWidth() - PanelMargin * 2);
+        int panelHeight = Math.Min(PanelMaximumHeight, Raylib.GetScreenHeight() - PanelMargin * 2);
+        int panelX = Math.Max(PanelMargin, (Raylib.GetScreenWidth() - panelWidth) / 2);
+        int panelY = Math.Max(PanelMargin, (Raylib.GetScreenHeight() - panelHeight) / 2);
+        int textWidth = panelWidth - PanelPadding * 2;
 
-        int y = PanelY + 40;
-        foreach (string line in history)
+        Raylib.DrawRectangle(panelX, panelY, panelWidth, panelHeight, new Color(10, 15, 20, 246));
+        Raylib.DrawRectangleLines(panelX, panelY, panelWidth, panelHeight, new Color(65, 204, 168, 255));
+        Raylib.DrawRectangle(panelX, panelY, panelWidth, 36, new Color(19, 42, 48, 255));
+        DrawText("HOST DEBUGGER", panelX + PanelPadding, panelY + 10, new Color(103, 242, 202, 255));
+        DrawText("F12 close  ESC hide", panelX + panelWidth - PanelPadding - TextWidth("F12 close  ESC hide"), panelY + 10, new Color(177, 200, 206, 255));
+
+        int historyTop = panelY + 50;
+        int inputY = panelY + panelHeight - 34;
+        int visibleLines = Math.Max(1, (inputY - historyTop - 8) / LineHeight);
+        List<string> visualHistory = WrapHistory(textWidth);
+        int firstLine = Math.Max(0, visualHistory.Count - visibleLines);
+        int y = historyTop;
+        for (var index = firstLine; index < visualHistory.Count; index++)
         {
-            Raylib.DrawText(line, PanelX + 12, y, FontSize, Color.LightGray);
+            Color color = visualHistory[index].StartsWith("> ", StringComparison.Ordinal)
+                ? new Color(103, 242, 202, 255)
+                : new Color(218, 226, 230, 255);
+            DrawText(visualHistory[index], panelX + PanelPadding, y, color);
             y += LineHeight;
         }
 
-        Raylib.DrawText($"> {input}", PanelX + 12, PanelY + PanelHeight - 30, FontSize, Color.White);
+        Raylib.DrawRectangle(panelX + 1, inputY - 8, panelWidth - 2, 1, new Color(50, 80, 87, 255));
+        string prompt = $"> {input}";
+        DrawText(TruncateToWidth(prompt, textWidth), panelX + PanelPadding, inputY, Color.White);
     }
 
     public string Execute(string command)
@@ -101,7 +126,7 @@ public sealed class DebuggerConsole
         {
             string result = parts[0].ToLowerInvariant() switch
             {
-                "help" => "help regs status pause run step [n] mem <addr> [len] break <addr> clear <addr>|all breaks set <reg> <value> reset",
+                "help" => "Commands: regs, status, pause, run, step [n], mem <addr> [len], break <addr>, clear <addr>|all, breaks, set <reg> <value>, reset",
                 "regs" => FormatRegisters(),
                 "status" => FormatStatus(),
                 "pause" => Pause(),
@@ -268,6 +293,92 @@ public sealed class DebuggerConsole
         history.Add(line);
         while (history.Count > MaximumHistoryLines)
             history.RemoveAt(0);
+    }
+
+    private List<string> WrapHistory(int width)
+    {
+        var lines = new List<string>();
+        foreach (string line in history)
+            lines.AddRange(WrapLine(line, width));
+        return lines;
+    }
+
+    private IEnumerable<string> WrapLine(string value, int width)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            yield return string.Empty;
+            yield break;
+        }
+
+        var line = string.Empty;
+        foreach (string word in value.Split(' ', StringSplitOptions.None))
+        {
+            string candidate = line.Length == 0 ? word : $"{line} {word}";
+            if (line.Length != 0 && TextWidth(candidate) > width)
+            {
+                yield return line;
+                line = word;
+            }
+            else
+            {
+                line = candidate;
+            }
+        }
+
+        while (TextWidth(line) > width)
+        {
+            int count = Math.Max(1, line.Length - 1);
+            while (count > 1 && TextWidth(line[..count]) > width)
+                count--;
+            yield return line[..count];
+            line = line[count..];
+        }
+
+        yield return line;
+    }
+
+    private string TruncateToWidth(string value, int width)
+    {
+        if (TextWidth(value) <= width)
+            return value;
+
+        const string Ellipsis = "...";
+        int count = value.Length;
+        while (count > 0 && TextWidth(value[..count] + Ellipsis) > width)
+            count--;
+        return value[..count] + Ellipsis;
+    }
+
+    private void DrawText(string value, int x, int y, Color color)
+    {
+        Raylib.DrawTextEx(font, value, new Vector2(x, y), FontSize, 0, color);
+    }
+
+    private int TextWidth(string value)
+    {
+        return (int)MathF.Ceiling(Raylib.MeasureTextEx(font, value, FontSize, 0).X);
+    }
+
+    private void EnsureFont()
+    {
+        if (fontLoaded)
+            return;
+
+        const string CascadiaMonoPath = @"C:\Windows\Fonts\CascadiaMono.ttf";
+        ownsFont = File.Exists(CascadiaMonoPath);
+        font = ownsFont ? Raylib.LoadFont(CascadiaMonoPath) : Raylib.GetFontDefault();
+        fontLoaded = true;
+    }
+
+    public void Dispose()
+    {
+        if (disposed)
+            return;
+
+        if (fontLoaded && ownsFont)
+            Raylib.UnloadFont(font);
+        disposed = true;
     }
 
     private static int ParseInt(string value)

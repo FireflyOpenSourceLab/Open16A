@@ -39,6 +39,7 @@ machine.IoBus.Write(0x20, (ushort)VideoMode.Indexed4);
 try
 {
     using var screen = new RayLibScreen();
+    using var debuggerScope = debugger;
     while (!Raylib.WindowShouldClose())
     {
         debugger.UpdateInput();
