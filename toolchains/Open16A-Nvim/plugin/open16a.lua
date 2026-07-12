@@ -12,17 +12,17 @@ vim.filetype.add({
 
 vim.api.nvim_create_user_command("Open16AStart", function()
     require("open16a").start()
-end, { desc = "Start the Open16A language server for this buffer" })
+end, { desc = "Start Open16A through nvim-lspconfig" })
 
 vim.api.nvim_create_user_command("Open16ARestart", function()
     require("open16a").restart()
-end, { desc = "Restart the Open16A language server for this buffer" })
+end, { desc = "Restart Open16A through nvim-lspconfig" })
 
 local group = vim.api.nvim_create_augroup("Open16ALanguageServer", { clear = true })
 vim.api.nvim_create_autocmd("FileType", {
     group = group,
     pattern = "open16a",
-    callback = function()
-        require("open16a").start()
+    callback = function(event)
+        require("open16a").start(event.buf)
     end
 })
