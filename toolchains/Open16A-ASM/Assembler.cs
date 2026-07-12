@@ -7,7 +7,12 @@ public sealed record AssemblyResult(uint Origin, byte[] Bytes);
 
 public sealed class AssemblyException : Exception
 {
-    public AssemblyException(int line, string message) : base($"Line {line}: {message}") { }
+    public AssemblyException(int line, string message) : base($"Line {line}: {message}")
+    {
+        Line = line;
+    }
+
+    public int Line { get; }
 }
 
 public sealed class Assembler
