@@ -113,9 +113,17 @@ append_done:
 execute_direct:
     li r1, input_length
     ld.bu r2, [r1]
+    li r1, input_buffer
+    ld.bu r3, [r1]
+    li r4, 0030h
+    blo r3, r4, direct_command
+    li r4, 003ah
+    bhs r3, r4, direct_command
+    calla enter_program_line
+    ret
+direct_command:
     li r3, 3
     bne r2, r3, direct_error
-    li r1, input_buffer
     ld.bu r2, [r1]
     li r3, 0072h
     bne r2, r3, direct_cls
@@ -144,6 +152,164 @@ direct_cls:
 direct_error:
     li r1, syntax_text
     calla puts
+    ret
+
+; Minimal in-guest program editor. It accepts a decimal line number followed
+; by PRINT "text" or END and appends a B16P record to the program store.
+; This is intentionally the first vertical slice of the guest tokenizer.
+enter_program_line:
+    li r1, input_buffer
+    li r0, 0
+parse_line_number:
+    ld.bu r3, [r1]
+    li r4, 0030h
+    blo r3, r4, line_number_done
+    li r4, 003ah
+    bhs r3, r4, line_number_done
+    li r4, 10
+    mul r0, r0, r4
+    li r4, 0030h
+    sub r3, r3, r4
+    add r0, r0, r3
+    li r4, 1
+    add r1, r1, r4
+    jmpa parse_line_number
+line_number_done:
+    li r4, stored_line_number
+    st.w r0, [r4]
+skip_line_spaces:
+    ld.bu r3, [r1]
+    li r4, 0020h
+    bne r3, r4, parse_statement
+    li r4, 1
+    add r1, r1, r4
+    jmpa skip_line_spaces
+parse_statement:
+    ld.bu r3, [r1]
+    li r4, 0070h
+    beq r3, r4, parse_print_line
+    li r4, 0065h
+    beq r3, r4, store_end_line
+    jmpa direct_error
+parse_print_line:
+    ld.bu r3, [r1 + 1]
+    li r4, 0072h
+    bne r3, r4, direct_error
+    ld.bu r3, [r1 + 2]
+    li r4, 0069h
+    bne r3, r4, direct_error
+    ld.bu r3, [r1 + 3]
+    li r4, 006eh
+    bne r3, r4, direct_error
+    ld.bu r3, [r1 + 4]
+    li r4, 0074h
+    bne r3, r4, direct_error
+    li r4, 5
+    add r1, r1, r4
+    jmpa skip_print_spaces
+skip_print_spaces:
+    ld.bu r3, [r1]
+    li r4, 0020h
+    bne r3, r4, print_quote
+    li r4, 1
+    add r1, r1, r4
+    jmpa skip_print_spaces
+print_quote:
+    li r4, 0022h
+    bne r3, r4, direct_error
+    li r4, 1
+    add r1, r1, r4
+    mov r5, r1
+    li r6, 0
+count_print_string:
+    ld.bu r3, [r1]
+    li r4, 0022h
+    beq r3, r4, store_print_line
+    li r4, 0
+    beq r3, r4, direct_error
+    li r4, 1
+    add r1, r1, r4
+    add r6, r6, r4
+    li r4, 00ffh
+    bne r6, r4, count_print_string
+    jmpa direct_error
+store_print_line:
+    li r0, 3
+    add r0, r0, r6
+    li r1, 0091h
+    li r2, 0083h
+    calla append_program_record
+    ret
+store_end_line:
+    li r0, 1
+    li r1, 009dh
+    li r2, 0
+    li r5, 0
+    li r6, 0
+    calla append_program_record
+    ret
+
+; R0=token length, R1=first token, R2=second token, R5=string source, R6=string length.
+append_program_record:
+    li r3, 4000h
+    ld.bu r4, [r3]
+    li r7, 0042h
+    beq r4, r7, program_header_ready
+    li r4, 0042h
+    st.b r4, [r3]
+    li r4, 0031h
+    st.b r4, [r3 + 1]
+    li r4, 0036h
+    st.b r4, [r3 + 2]
+    li r4, 0050h
+    st.b r4, [r3 + 3]
+    li r4, 1
+    st.b r4, [r3 + 4]
+    li r4, 0
+    st.b r4, [r3 + 5]
+    st.w r4, [r3 + 6]
+    st.w r4, [r3 + 8]
+program_header_ready:
+    ld.w r4, [r3 + 6]
+    li r7, 400ah
+    add r4, r4, r7
+    li r7, stored_line_number
+    ld.w r7, [r7]
+    st.w r7, [r4]
+    st.w r0, [r4 + 2]
+    li r7, 4
+    add r4, r4, r7
+    st.b r1, [r4]
+    li r7, 1
+    add r4, r4, r7
+    li r7, 1
+    beq r0, r7, append_finish
+    st.b r2, [r4]
+    add r4, r4, r7
+    st.b r6, [r4]
+    add r4, r4, r7
+append_string_bytes:
+    li r7, 0
+    beq r6, r7, append_finish
+    ld.bu r7, [r5]
+    st.b r7, [r4]
+    li r7, 1
+    add r5, r5, r7
+    add r4, r4, r7
+    sub r6, r6, r7
+    jmpa append_string_bytes
+append_finish:
+    li r4, 4006h
+    ld.w r7, [r4]
+    li r3, 4
+    add r7, r7, r3
+    add r7, r7, r0
+    st.w r7, [r4]
+    li r4, 4008h
+    ld.w r7, [r4]
+    li r3, 1
+    add r7, r7, r3
+    st.w r7, [r4]
     ret
 
 maybe_autorun:
@@ -526,6 +692,8 @@ no_program_text:
     .byte '?','N','O',' ','P','R','O','G','R','A','M',10,0
 input_length:
     .byte 0
+stored_line_number:
+    .word 0
 input_buffer:
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 integer_vars:
