@@ -6,21 +6,40 @@ public sealed class Memory
     public const ushort SYSTEM_ROM_START  = 0x0300;
     public const int    SYSTEM_ROM_LENGTH = 0x1000;
 
-    private readonly byte[] data = new byte[INSTALLED_BYTES];
+    private readonly byte[] data;
+    private readonly bool   flatLogicalAddressing;
 
     private bool systemRomLoaded;
 
-    public Memory()
+    public Memory() : this(INSTALLED_BYTES)
     {
     }
 
-    public Memory(byte[] systemRom)
+    public Memory(int installedBytes, bool flatLogicalAddressing = false)
+    {
+        if (installedBytes is < 1 or > INSTALLED_BYTES)
+            throw new ArgumentOutOfRangeException(nameof(installedBytes));
+        if (flatLogicalAddressing && installedBytes != 1 << 16)
+        {
+            throw new ArgumentException(
+                "Flat logical addressing requires exactly 64 KiB of installed memory.",
+                nameof(installedBytes));
+        }
+
+        data                       = new byte[installedBytes];
+        InstalledBytes             = installedBytes;
+        this.flatLogicalAddressing = flatLogicalAddressing;
+    }
+
+    public Memory(byte[] systemRom) : this(INSTALLED_BYTES)
     {
         ArgumentNullException.ThrowIfNull(systemRom);
         LoadSystemRom(systemRom);
     }
 
     public bool HasSystemRom => systemRomLoaded;
+
+    public int InstalledBytes { get; }
 
     public ReadOnlyMemory<byte> Data => data;
 
@@ -39,14 +58,14 @@ public sealed class Memory
 
     public byte ReadPhysical(uint addr)
     {
-        if (addr >= INSTALLED_BYTES)
+        if (addr >= InstalledBytes)
             throw new ArgumentOutOfRangeException(nameof(addr), "Memory Address Read Out of Range");
         return data[addr];
     }
 
     public void WritePhysical(uint addr, byte content)
     {
-        if (addr >= INSTALLED_BYTES)
+        if (addr >= InstalledBytes)
             throw new ArgumentOutOfRangeException(nameof(addr), "Memory Address Write Out of Range");
 
         if (isSystemRomAddress(addr))
@@ -89,12 +108,12 @@ public sealed class Memory
 
     public byte ReadLogical(ushort addr, byte sg)
     {
-        return ReadPhysical(ToPhysicalAddress(addr, sg));
+        return ReadPhysical(toPhysicalAddress(addr, sg));
     }
 
     public void WriteLogical(ushort addr, byte sg, byte content)
     {
-        WritePhysical(ToPhysicalAddress(addr, sg), content);
+        WritePhysical(toPhysicalAddress(addr, sg), content);
     }
 
     public ushort ReadLogicalWord(ushort addr, byte sg)
@@ -115,9 +134,14 @@ public sealed class Memory
         return systemRomLoaded && addr is >= SYSTEM_ROM_START and < SYSTEM_ROM_START + SYSTEM_ROM_LENGTH;
     }
 
-    private static void ensurePhysicalRange(uint addr, int length)
+    private uint toPhysicalAddress(ushort logical, byte sg)
     {
-        if (length < 0 || addr > INSTALLED_BYTES || (ulong)addr + (uint)length > INSTALLED_BYTES)
+        return flatLogicalAddressing ? logical : ToPhysicalAddress(logical, sg);
+    }
+
+    private void ensurePhysicalRange(uint addr, int length)
+    {
+        if (length < 0 || addr > (uint)InstalledBytes || (ulong)addr + (uint)length > (uint)InstalledBytes)
             throw new ArgumentOutOfRangeException(nameof(addr), "Physical memory range is out of bounds.");
     }
 

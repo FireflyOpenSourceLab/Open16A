@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OldSimulator.Expansion;
+using OldSimulator.Expansion.EmbeddedAsm;
 using OldSimulator.Expansion.Loopback;
 using Xunit;
 
@@ -41,6 +42,39 @@ public sealed class ExpansionPluginLoaderTests
 
             Assert.True(completion.Completed);
             Assert.Equal((byte)0xA5, mailbox[7]);
+        }
+        finally
+        {
+            installation.Card.Dispose();
+        }
+    }
+
+    [Fact]
+    public void LoadDiscoversTheEmbeddedAsmPluginWithItsPrivateCoreDependency()
+    {
+        using var fixture = new LoaderFixture(
+            new
+            {
+                version = 1,
+                slots = new[]
+                {
+                    new
+                    {
+                        slot = 1,
+                        assembly = typeof(EmbeddedAsmExpansionCardPlugin).Assembly.Location,
+                        cardId = EmbeddedAsmExpansionCardPlugin.CardId,
+                        settings = new { firmwareBase64 = Convert.ToBase64String([0]) }
+                    }
+                }
+            });
+
+        IReadOnlyList<ExpansionCardInstallation> installations =
+            ExpansionPluginLoader.Load(fixture.ConfigPath);
+
+        ExpansionCardInstallation installation = Assert.Single(installations);
+        try
+        {
+            Assert.Equal(EmbeddedAsmExpansionCardPlugin.CardId, installation.Descriptor.Id);
         }
         finally
         {

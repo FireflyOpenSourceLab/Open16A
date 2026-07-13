@@ -297,6 +297,8 @@ OUT 0020h, R0
 
 插件 API、装载错误和示例卡实现见[扩展卡插件开发手册](EXPANSION_PLUGINS.zh-CN.md)。
 
+`open16a.embedded-asm` 是一张独立的平坦 64 KiB Open16A 协处理器卡：其固件固定从 `0300h` 装入，初始栈为 `BFFFh`，内部 `FC00h-FFFFh` 映射本槽 mailbox，外部命令通过唯一向量 `00h` 传入并在 `R0` 提供命令字。完整固件格式和示例见[扩展卡插件开发手册](EXPANSION_PLUGINS.zh-CN.md#7-内嵌-asm-协处理器卡)。
+
 ## 6. 宿主调试器
 
 F12 打开的调试器是宿主工具，不属于模拟机 ROM、设备或虚拟周期模型。打开时会暂停 `Machine`，其命令不消耗虚拟 cycle。

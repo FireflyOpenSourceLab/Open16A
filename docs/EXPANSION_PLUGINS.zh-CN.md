@@ -88,3 +88,13 @@ public interface IExpansionCardCommand
 ## 6. v1 边界
 
 Guest ABI 不提供通用 `IDENTIFY` 或卡 ID 查询；操作系统和驱动必须从机器配置预先知道每个槽的卡类型及卡协议。插件也不能请求任意 guest 内存 DMA、注册额外 I/O 端口、直接抬起中断或创建热插拔设备。需要传输的数据必须放在本槽的 1 KiB mailbox 中，并通过单命令完成协议交换。
+
+## 7. 内嵌 ASM 协处理器卡
+
+`OldSimulator.Expansion.EmbeddedAsm` 提供 `open16a.embedded-asm` 卡。它执行已经编译为原始 `.bin` 字节流的 Open16A 固件，不会在运行时解析或汇编 ASM 源码。设置中的 `firmwareBase64` 是必填项，内容从物理 `0300h` 固定装入；字节流不包含 origin 头，且不得跨入 `FC00h` mailbox 区。
+
+卡拥有独立、平坦的 64 KiB 地址空间：`0000h-FFFFh` 的逻辑地址就是物理地址，`SG` 不参与映射。布局为 `0010h-0011h` 的唯一外部命令中断向量（向量 `0`）、固件入口 `0300h`、初始向下增长栈 `BFFFh`、以及末尾 `FC00h-FFFFh` 的 1 KiB mailbox。
+
+外部槽命令到达时，卡先把其 mailbox 快照复制到内部 `FC00h`，把 16-bit 命令放进 `R0`，并抬起向量 `0`。固件应在启动时写入 `0010h`、执行 `EI`，通常进入 `HALT` 等待命令；中断处理程序读写 `R0` 和末尾 mailbox，执行 `IRET` 后回到 `HALT` 即完成本次外部命令，内部 mailbox 会完整写回主机卡 mailbox。
+
+仓库中的 `examples/command-echo.asm` 是可编译示例：它把输入命令写入 mailbox 字节 `2-3`，并将字节 `0` 加一。`embedded-asm.example.json` 包含该程序的 Base64 编译结果；将其作为 `simulator.json` 或通过 `--config` 指定即可加载。固件若未启用中断、未返回 `HALT` 或触发 CPU fault，外部命令不会正常完成，后者会使扩展卡进入 `PluginFault`。

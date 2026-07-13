@@ -22,6 +22,9 @@
     <None Update="simulator.example.json"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest"/>
+    <None Update="embedded-asm.example.json"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"/>
   </ItemGroup>
 
   <ItemGroup>
@@ -34,6 +37,9 @@
     <Compile Remove="OldSimulator.Expansion.Loopback\**\*.cs"/>
     <EmbeddedResource Remove="OldSimulator.Expansion.Loopback\**\*"/>
     <None Remove="OldSimulator.Expansion.Loopback\**\*"/>
+    <Compile Remove="OldSimulator.Expansion.EmbeddedAsm\**\*.cs"/>
+    <EmbeddedResource Remove="OldSimulator.Expansion.EmbeddedAsm\**\*"/>
+    <None Remove="OldSimulator.Expansion.EmbeddedAsm\**\*"/>
     <Compile Remove="toolchains\**\*.cs"/>
     <EmbeddedResource Remove="toolchains\**\*"/>
     <None Remove="toolchains\**\*"/>
@@ -50,6 +56,22 @@
           SkipUnchangedFiles="true"/>
   </Target>
 
+  <Target Name="CopyEmbeddedAsmExpansionCardToOutput"
+          AfterTargets="Build"
+          Condition="'$(SkipEmbeddedAsmPackaging)' != 'true'">
+    <MSBuild Projects="$(MSBuildProjectDirectory)\OldSimulator.Expansion.EmbeddedAsm\OldSimulator.Expansion.EmbeddedAsm.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)"/>
+    <ItemGroup>
+      <EmbeddedAsmExpansionCardFiles Include="OldSimulator.Expansion.EmbeddedAsm\bin\$(Configuration)\$(TargetFramework)\*.dll"/>
+      <EmbeddedAsmExpansionCardFiles Include="OldSimulator.Expansion.EmbeddedAsm\bin\$(Configuration)\$(TargetFramework)\*.deps.json"/>
+    </ItemGroup>
+    <MakeDir Directories="$(TargetDir)plugins"/>
+    <Copy SourceFiles="@(EmbeddedAsmExpansionCardFiles)"
+          DestinationFolder="$(TargetDir)plugins"
+          SkipUnchangedFiles="true"/>
+  </Target>
+
   <Target Name="CopyExampleExpansionCardToPublish" AfterTargets="Publish">
     <ItemGroup>
       <PublishedExampleExpansionCardFiles Include="OldSimulator.Expansion.Loopback\bin\$(Configuration)\$(TargetFramework)\Open16A.Loopback.dll"/>
@@ -57,6 +79,17 @@
     </ItemGroup>
     <MakeDir Directories="$(PublishDir)plugins"/>
     <Copy SourceFiles="@(PublishedExampleExpansionCardFiles)"
+          DestinationFolder="$(PublishDir)plugins"
+          SkipUnchangedFiles="true"/>
+  </Target>
+
+  <Target Name="CopyEmbeddedAsmExpansionCardToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <PublishedEmbeddedAsmExpansionCardFiles Include="OldSimulator.Expansion.EmbeddedAsm\bin\$(Configuration)\$(TargetFramework)\*.dll"/>
+      <PublishedEmbeddedAsmExpansionCardFiles Include="OldSimulator.Expansion.EmbeddedAsm\bin\$(Configuration)\$(TargetFramework)\*.deps.json"/>
+    </ItemGroup>
+    <MakeDir Directories="$(PublishDir)plugins"/>
+    <Copy SourceFiles="@(PublishedEmbeddedAsmExpansionCardFiles)"
           DestinationFolder="$(PublishDir)plugins"
           SkipUnchangedFiles="true"/>
   </Target>

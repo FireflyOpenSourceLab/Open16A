@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "slots": [
+    {
+      "slot": 0,
+      "assembly": "plugins/Open16A.EmbeddedAsm.dll",
+      "cardId": "open16a.embedded-asm",
+      "settings": {
+        "firmwareBase64": "EQADFhIAABAxQAAA2AAUAAMS6ACIgBEA/AAwIAACGiAAABMAAAE6TCogAADwAA=="
+      }
+    }
+  ]
+}

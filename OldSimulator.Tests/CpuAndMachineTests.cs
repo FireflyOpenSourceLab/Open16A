@@ -122,6 +122,19 @@ public sealed class CpuAndMachineTests
     }
 
     [Fact]
+    public void Flat64KiBMemoryMapsEveryLogicalAddressWithoutSegmentation()
+    {
+        var memory = new Memory(1 << 16, flatLogicalAddressing: true);
+
+        memory.WriteLogical(0xFC00, 0, 0x5A);
+        memory.WriteLogical(0xC000, 3, 0xA5);
+
+        Assert.Equal((byte)0x5A, memory.ReadPhysical(0xFC00));
+        Assert.Equal((byte)0xA5, memory.ReadPhysical(0xC000));
+        Assert.Throws<ArgumentOutOfRangeException>(() => memory.ReadPhysical(0x1_0000));
+    }
+
+    [Fact]
     public void VideoInterruptWakesHaltedCpuAndIretRestoresTheFrame()
     {
         var machine = new Machine(videoFrameCycles: 13);
