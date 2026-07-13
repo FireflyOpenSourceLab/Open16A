@@ -6,34 +6,50 @@
 `Open16A-BASIC-PACK` 相同的 `B16P` v1 格式，位于 `4000h`；因此宿主预置的
 `.bas` 程序和 guest 内编辑的行可以互换。
 
-当前 guest REPL 支持：
+## 语言与 REPL
 
-- 输入带行号的 `PRINT "text"`、`GOTO line` 或 `END` 行；相同行号会替换，
-  只有行号会删除，行按号码排序保存。保存程序行后会直接接受下一行，不重复输出
-  `READY.`。
-- 直接命令 `RUN`、`CLS`、`NEW` 与 `LIST`。`LIST` 可反解 REPL 支持的行类型，
-  来自新版宿主打包器但尚未具备 guest 反解器的语句会显示为 `?`。
+Open16A BASIC 1.0 是 Microsoft BASIC 风格的 16-bit 整数子集。默认数值变量
+`A-Z` 与显式整数变量 `A%-Z%` 都保存带符号 16-bit 值；字符串变量 `A$-Z$`
+每个最多保存 31 个 ASCII 字符。一维数值数组每个变量固定提供 16 个元素，
+`DIM A(n)` 用于声明和范围检查。
 
-预置程序执行目前包含如下整数控制子集：
+REPL 与 PACK 使用同一套大小写不敏感 tokenizer。输入带行号的任意支持语句会按
+行号插入或替换；只输入行号会删除该行。编辑后立即接受下一行，不重复输出
+`READY.`。直接命令为 `RUN`、`LIST`、`NEW`、`CONT` 和 `CLS`；`LIST` 从 token
+流完整反解关键字、变量、整数、字符串和运算符。
+
+支持的语句和函数：
+
+- `LET`（`LET` 可省略的语法尚不接受）、`PRINT`、`INPUT`、`IF/THEN/ELSE`、
+  `GOTO`、`GOSUB/RETURN`、`FOR/TO/STEP/NEXT`、`DIM`、`DATA/READ/RESTORE`、
+  `REM`、`STOP/CONT`、`END`。
+- `CLS`、`COLOR foreground[,background]`、`LOCATE row,column`、
+  `PEEK(address)` 与 `POKE address,value`。
+- 带括号和 Microsoft BASIC 优先级的 `+ - * / AND OR NOT`，以及
+  `= < > <= >= <>` 条件；函数 `ABS`、`INT`、`SGN`、`LEN`、`VAL`。
+- 字符串字面量、字符串变量赋值/复制、`PRINT` 和 `INPUT`。
+
+示例：
 
 ```basic
-10 LET A%=1
-20 IF A%=1 THEN 50 ELSE 40
-30 PRINT "unreached"
-40 END
-50 POKE 8192,65
-60 PRINT PEEK(8192)
-70 GOTO 90
+10 DIM A(10)
+20 FOR I=0 TO 10
+30 LET A(I)=I*2
+40 NEXT I
+50 INPUT "VALUE"; N
+60 IF N>=0 THEN 80 ELSE 70
+70 STOP
+80 PRINT "A(7)="; A(7)
 90 END
 ```
 
-已实现的程序语句是 `LET A%=integer`、`PRINT "text"`、`PRINT integer`、`PRINT A%`、`PRINT PEEK(address)`、`CLS`、`POKE address,value`、`IF left (=|<|>) right THEN line [ELSE line]`、`GOTO line`、`REM`、`END` 与 `STOP`。整数操作数可为 `-32768..32767` 字面量或 `A%-Z%`；`PEEK/POKE` 使用当前 `SG` 的逻辑内存地址，`POKE` 写入低 8 bit。
+`Ctrl+C` 通过虚拟键盘 IRQ 请求中断，在下一条 BASIC 语句边界打印 `BREAK` 并
+返回输入等待。模拟器还限制每个宿主帧的 guest cycle 预算，紧密 BASIC 循环不会
+长期阻塞窗口消息与键盘采样。
 
-`Open16A-BASIC-PACK` 同时为后续解释器版本编码完整 Microsoft BASIC 核心的
-词法面：浮点/整数/字符串变量、表达式、`FOR/NEXT`、`GOSUB/RETURN`、数组、
-`INPUT`、`DATA/READ/RESTORE` 与 `CONT`。其中新增的 `DATA`、`READ`、`RESTORE`
-和 `CONT` token 分别固定为 `B6h` 到 `B9h`，不会改变现有程序映像的 ABI。尚未由
-guest 执行核心处理的 token 会报告语法错误，而不会静默误执行。
+本子集不包含 FP32 算术、字符串数组、磁盘/文件命令、图形绘制命令或 GW-BASIC
+硬件扩展；这些不在 1.0 的语言契约内。`PEEK/POKE` 使用当前 `SG` 的逻辑地址，
+`POKE` 写入低 8 bit。
 
 单独构建默认解释器，不带预置程序：
 

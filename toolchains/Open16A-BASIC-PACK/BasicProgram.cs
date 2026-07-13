@@ -72,8 +72,7 @@ public static class BasicTokenizer
         ["REM"] = 0x9C, ["END"] = 0x9D, ["STOP"] = 0x9E, ["DIM"] = 0x9F,
         ["CLS"] = 0xA0, ["COLOR"] = 0xA1, ["LOCATE"] = 0xA2,
         ["ABS"] = 0xA3, ["INT"] = 0xA4, ["SGN"] = 0xA5, ["LEN"] = 0xA6,
-        ["LEFT$"] = 0xA7, ["RIGHT$"] = 0xA8, ["MID$"] = 0xA9, ["CHR$"] = 0xAA,
-        ["STR$"] = 0xAB, ["VAL"] = 0xAC, ["AND"] = 0xAD, ["OR"] = 0xAE,
+        ["VAL"] = 0xAC, ["AND"] = 0xAD, ["OR"] = 0xAE,
         ["NOT"] = 0xAF, ["RUN"] = 0xB0, ["LIST"] = 0xB1, ["NEW"] = 0xB2,
         ["PEEK"] = 0xB3, ["POKE"] = 0xB4, ["ELSE"] = 0xB5,
         ["DATA"] = BasicProgramFormat.Data, ["READ"] = BasicProgramFormat.Read,
@@ -237,14 +236,7 @@ public static class BasicTokenizer
             tokens.Add((byte)integerValue);
             return;
         }
-        if (!float.TryParse(literal, NumberStyles.Float, CultureInfo.InvariantCulture, out float value) || float.IsInfinity(value) || float.IsNaN(value))
-            throw Error(sourceLine, $"Invalid finite FP32 literal '{literal}'.");
-        uint bits = BitConverter.SingleToUInt32Bits(value);
-        tokens.Add(BasicProgramFormat.FloatLiteral);
-        tokens.Add((byte)(bits >> 24));
-        tokens.Add((byte)(bits >> 16));
-        tokens.Add((byte)(bits >> 8));
-        tokens.Add((byte)bits);
+        throw Error(sourceLine, $"Open16A BASIC 1.0 supports only -32768..32767 integer literals, got '{literal}'.");
     }
 
     private static void SkipWhitespace(string text, ref int index)

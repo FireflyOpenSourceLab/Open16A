@@ -1,5 +1,6 @@
 using OldSimulator.VirtualDevices;
 using Open16A.Asm;
+using Open16A.BasicPack;
 using Xunit;
 
 namespace OldSimulator.Tests;
@@ -46,6 +47,135 @@ public sealed class BasicInterpreterTests
         Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
     }
 
+    [Fact]
+    public void ControlCInterruptsAnInfiniteBasicLoop()
+    {
+        Machine machine = StartInterpreter();
+        WriteInfiniteLoopProgram(machine.Memory);
+        machine.AdvanceCycles(10_000);
+
+        Assert.False(machine.Cpu.Halted);
+        machine.Keyboard.SetKeyState(0x39, true); // LeftControl
+        machine.AdvanceCycles(256);
+        machine.Keyboard.SetKeyState(0x30, true); // C
+        machine.AdvanceCycles(10_000);
+
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
+    public void ReplUsesTheSharedTokenFormatForLetExpressions()
+    {
+        Machine machine = StartInterpreter();
+        machine.AdvanceCycles(100_000);
+
+        SendLine(machine, "10 let a=5");
+
+        Assert.Equal((ushort)1, machine.Memory.ReadPhysicalWord(0x4008));
+        Assert.Equal((ushort)7, machine.Memory.ReadPhysicalWord(0x400C));
+        Assert.Equal(new byte[] { 0x90, 0x84, 0x00, (byte)'=', 0x82, 0x00, 0x05 },
+            Enumerable.Range(0, 7).Select(index => machine.Memory.ReadPhysical(0x400Eu + (uint)index)).ToArray());
+    }
+
+    [Fact]
+    public void ExecutesIntegerExpressionsWithMicrosoftBasicPrecedence()
+    {
+        Machine machine = StartInterpreter();
+        WritePackedProgram(machine.Memory, "10 LET A=2+3*4\n20 POKE 8000,A\n30 END");
+
+        machine.AdvanceCycles(100_000);
+
+        Assert.Equal((byte)14, machine.Memory.ReadPhysical(8000));
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
+    public void ExecutesGosubAndReturnUsingABasicControlStack()
+    {
+        Machine machine = StartInterpreter();
+        WritePackedProgram(machine.Memory,
+            "10 GOSUB 100\n20 POKE 9000,A\n30 END\n100 LET A=7\n110 RETURN");
+
+        machine.AdvanceCycles(100_000);
+
+        Assert.Equal((byte)7, machine.Memory.ReadPhysical(9000));
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
+    public void ExecutesForNextWithToAndStepFrames()
+    {
+        Machine machine = StartInterpreter();
+        WritePackedProgram(machine.Memory,
+            "10 LET A=0\n20 FOR I=1 TO 5\n30 LET A=A+I\n40 NEXT I\n50 POKE 9100,A\n60 END");
+
+        machine.AdvanceCycles(200_000);
+
+        Assert.Equal((byte)15, machine.Memory.ReadPhysical(9100));
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
+    public void InputSuspendsForGuestKeyboardAndResumesTheProgram()
+    {
+        Machine machine = StartInterpreter();
+        WritePackedProgram(machine.Memory, "10 INPUT \"VALUE\"; A\n20 POKE 9200,A\n30 END");
+        machine.AdvanceCycles(100_000);
+
+        Assert.True(machine.Cpu.Halted);
+        SendLine(machine, "42");
+
+        Assert.Equal((byte)42, machine.Memory.ReadPhysical(9200));
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
+    public void DataReadAndRestoreShareAProgramDataCursor()
+    {
+        Machine machine = StartInterpreter();
+        WritePackedProgram(machine.Memory,
+            "10 DATA 3,4\n20 READ A,B\n30 POKE 9300,A*10+B\n40 RESTORE\n50 READ C\n60 POKE 9301,C\n70 END");
+
+        machine.AdvanceCycles(200_000);
+
+        Assert.Equal((byte)34, machine.Memory.ReadPhysical(9300));
+        Assert.Equal((byte)3, machine.Memory.ReadPhysical(9301));
+        Assert.True(machine.Cpu.Halted);
+    }
+
+    [Fact]
+    public void StoresCopiesAndMeasuresStringVariables()
+    {
+        Machine machine = StartInterpreter();
+        WritePackedProgram(machine.Memory,
+            "10 LET A$=\"HELLO\"\n20 POKE 9400,LEN(A$)\n30 LET B$=A$\n40 POKE 9401,LEN(B$)\n50 END");
+
+        machine.AdvanceCycles(200_000);
+
+        Assert.Equal((byte)5, machine.Memory.ReadPhysical(9400));
+        Assert.Equal((byte)5, machine.Memory.ReadPhysical(9401));
+        Assert.True(machine.Cpu.Halted);
+    }
+
+    [Fact]
+    public void DimCreatesOneDimensionalNumericArrayStorage()
+    {
+        Machine machine = StartInterpreter();
+        WritePackedProgram(machine.Memory,
+            "10 DIM A(10)\n20 FOR I=0 TO 10\n30 LET A(I)=I*2\n40 NEXT I\n50 POKE 9500,A(7)\n60 END");
+
+        machine.AdvanceCycles(1_000_000);
+        machine.AdvanceCycles(1_000);
+
+        Assert.Equal((byte)14, machine.Memory.ReadPhysical(9500));
+        Assert.True(machine.Cpu.Halted);
+    }
+
     private static Machine StartInterpreter()
     {
         string root = FindProjectRoot();
@@ -71,17 +201,17 @@ public sealed class BasicInterpreterTests
     private static void Press(Machine machine, byte scanCode)
     {
         machine.Keyboard.SetKeyState(scanCode, true);
-        machine.AdvanceCycles(256);
+        machine.AdvanceCycles(2_048);
         machine.Keyboard.SetKeyState(scanCode, false);
-        machine.AdvanceCycles(256);
+        machine.AdvanceCycles(2_048);
     }
 
     private static byte ScanCode(char character) => character switch
     {
         '0' => 0x0A, '1' => 0x01, '2' => 0x02, '3' => 0x03, '4' => 0x04,
         '5' => 0x05, '6' => 0x06, '7' => 0x07, '8' => 0x08, '9' => 0x09,
-        ' ' => 0x3B, 'd' => 0x23, 'e' => 0x13, 'g' => 0x25, 'n' => 0x33,
-        'o' => 0x19, 't' => 0x15,
+        ' ' => 0x3B, '=' => 0x0C, 'a' => 0x21, 'd' => 0x23, 'e' => 0x13,
+        'g' => 0x25, 'l' => 0x29, 'n' => 0x33, 'o' => 0x19, 't' => 0x15,
         _ => throw new ArgumentOutOfRangeException(nameof(character), character, "No virtual scan-code mapping."),
     };
 
@@ -94,6 +224,25 @@ public sealed class BasicInterpreterTests
             0, 20, 0, 1, 0x9D
         ];
 
+        for (var index = 0; index < image.Length; index++)
+            memory.WritePhysical(0x4000u + (uint)index, image[index]);
+    }
+
+    private static void WriteInfiniteLoopProgram(Memory memory)
+    {
+        byte[] image =
+        [
+            (byte)'B', (byte)'1', (byte)'6', (byte)'P', 1, 1, 0, 8, 0, 1,
+            0, 10, 0, 4, 0x95, 0x82, 0, 10
+        ];
+
+        for (var index = 0; index < image.Length; index++)
+            memory.WritePhysical(0x4000u + (uint)index, image[index]);
+    }
+
+    private static void WritePackedProgram(Memory memory, string source)
+    {
+        byte[] image = BasicTokenizer.ParseProgram(source, autoRun: true).ToBytes();
         for (var index = 0; index < image.Length; index++)
             memory.WritePhysical(0x4000u + (uint)index, image[index]);
     }

@@ -14,6 +14,10 @@ Raylib.SetConfigFlags(
 Raylib.InitWindow(1024, 768, "The Open16A Simulator");
 Raylib.SetWindowMinSize(min_window_width, min_window_height);
 const ulong cpu_hz = 16_934_400;
+// Keep long-running interpreted programs from monopolizing the UI thread.
+// Excess virtual time is intentionally dropped: this is an interactive
+// simulator, and input/render responsiveness wins over catch-up execution.
+const ulong max_cycles_per_frame = cpu_hz / 240;
 
 long  previousTimestamp = Stopwatch.GetTimestamp();
 ulong cycleRemainder    = 0;
@@ -45,7 +49,7 @@ try
         ulong   cycles = (ulong)(scaled / (ulong)Stopwatch.Frequency);
         cycleRemainder = (ulong)(scaled % (ulong)Stopwatch.Frequency);
 
-        machine.AdvanceCycles(cycles);
+        machine.AdvanceCycles(Math.Min(cycles, max_cycles_per_frame));
         screen.Sync(machine.Video.CurrentFrame);
 
         Raylib.BeginDrawing();

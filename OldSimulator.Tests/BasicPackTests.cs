@@ -21,15 +21,16 @@ public sealed class BasicPackTests
     }
 
     [Fact]
-    public void EncodesVariablesFloatingLiteralsAndStrings()
+    public void EncodesVariablesAndStringsAndRejectsFloatingPoint()
     {
-        byte[] tokens = BasicTokenizer.Tokenize("A%=1.5: PRINT A$, \"OK\"");
+        byte[] tokens = BasicTokenizer.Tokenize("A%=15: PRINT A$, \"OK\"");
 
         Assert.Equal(BasicProgramFormat.Variable, tokens[0]);
         Assert.Equal((byte)(BasicProgramFormat.TypeInteger | 0), tokens[1]);
         Assert.Equal((byte)'=', tokens[2]);
-        Assert.Equal(BasicProgramFormat.FloatLiteral, tokens[3]);
+        Assert.Equal(BasicProgramFormat.IntegerLiteral, tokens[3]);
         Assert.Contains(BasicProgramFormat.StringLiteral, tokens);
+        Assert.Throws<BasicPackException>(() => BasicTokenizer.Tokenize("A=1.5"));
     }
 
     [Fact]
