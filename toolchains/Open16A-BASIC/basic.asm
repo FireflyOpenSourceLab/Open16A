@@ -126,7 +126,12 @@ execute_direct:
     li r4, 003ah
     bhs r3, r4, direct_command
     calla enter_program_line
-    ret
+    ; Program editing is quiet: the entered line is already echoed, so return
+    ; straight to the keyboard loop instead of printing another READY prompt.
+    li r1, input_length
+    li r0, 0
+    st.b r0, [r1]
+    jmpa input_loop
 direct_command:
     li r3, 3
     bne r2, r3, direct_error
@@ -313,6 +318,8 @@ parse_statement:
     ld.bu r3, [r1]
     li r4, 0
     beq r3, r4, delete_program_line
+    li r4, 0067h
+    beq r3, r4, parse_goto_line
     li r4, 0070h
     beq r3, r4, parse_print_line
     li r4, 0065h
@@ -376,10 +383,67 @@ store_end_line:
     calla append_program_record
     ret
 
+; Tokenize the interactive form "GOTO <decimal-line>" into the same bytes
+; produced by Open16A-BASIC-PACK: GOTO, INT16, big-endian target.
+parse_goto_line:
+    ld.bu r3, [r1 + 1]
+    li r4, 006fh
+    bne r3, r4, direct_error
+    ld.bu r3, [r1 + 2]
+    li r4, 0074h
+    bne r3, r4, direct_error
+    ld.bu r3, [r1 + 3]
+    li r4, 006fh
+    bne r3, r4, direct_error
+    li r4, 4
+    add r1, r1, r4
+skip_goto_spaces:
+    ld.bu r3, [r1]
+    li r4, 0020h
+    bne r3, r4, parse_goto_target
+    li r4, 1
+    add r1, r1, r4
+    jmpa skip_goto_spaces
+parse_goto_target:
+    li r0, 0
+    li r5, 0
+parse_goto_digit:
+    ld.bu r3, [r1]
+    li r4, 0030h
+    blo r3, r4, parse_goto_done
+    li r4, 003ah
+    bhs r3, r4, parse_goto_done
+    li r4, 10
+    mul r0, r0, r4
+    li r4, 0030h
+    sub r3, r3, r4
+    add r0, r0, r3
+    li r5, 1
+    li r4, 1
+    add r1, r1, r4
+    jmpa parse_goto_digit
+parse_goto_done:
+    li r4, 0
+    beq r5, r4, direct_error
+    ld.bu r3, [r1]
+    bne r3, r4, direct_error
+    li r1, direct_token_buffer
+    li r3, 0095h
+    st.b r3, [r1]
+    li r3, 0082h
+    st.b r3, [r1 + 1]
+    st.w r0, [r1 + 2]
+    li r0, 4
+    calla append_raw_record
+    ret
+
 ; R0=token length, R1=first token, R2=second token, R5=string source, R6=string length.
 ; Program records remain sorted by line number. This makes interactive editing
 ; use the same B16P image the host packer emits.
 append_program_record:
+    li r3, record_raw_mode
+    li r4, 0
+    st.b r4, [r3]
     li r3, record_token_length
     st.w r0, [r3]
     li r3, record_first_token
@@ -390,6 +454,19 @@ append_program_record:
     st.w r5, [r3]
     li r3, record_string_length
     st.w r6, [r3]
+    jmpa append_program_record_begin
+
+; R0=token byte length, R1=token byte source. Used by interactive statements
+; whose payload is not a PRINT string or a one-byte END token.
+append_raw_record:
+    li r3, record_raw_mode
+    li r4, 1
+    st.b r4, [r3]
+    li r3, record_token_length
+    st.w r0, [r3]
+    li r3, record_string_source
+    st.w r1, [r3]
+append_program_record_begin:
     li r3, 4000h
     ld.bu r4, [r3]
     li r7, 0042h
@@ -472,6 +549,10 @@ write_program_record:
     st.w r5, [r4 + 2]
     li r6, 4
     add r4, r4, r6
+    li r3, record_raw_mode
+    ld.bu r5, [r3]
+    li r6, 1
+    beq r5, r6, write_raw_record
     li r5, record_first_token
     ld.bu r5, [r5]
     st.b r5, [r4]
@@ -507,6 +588,21 @@ write_string_bytes:
     sub r7, r7, r3
     st.w r7, [r6]
     jmpa write_string_bytes
+write_raw_record:
+    li r5, record_string_source
+    ld.w r5, [r5]
+    li r6, record_token_length
+    ld.w r6, [r6]
+write_raw_bytes:
+    li r7, 0
+    beq r6, r7, write_record_finish
+    ld.bu r7, [r5]
+    st.b r7, [r4]
+    li r7, 1
+    add r5, r5, r7
+    add r4, r4, r7
+    sub r6, r6, r7
+    jmpa write_raw_bytes
 write_record_finish:
     li r4, 4006h
     ld.w r7, [r4]
@@ -983,6 +1079,8 @@ record_first_token:
     .byte 0
 record_second_token:
     .byte 0
+record_raw_mode:
+    .byte 0
 list_next:
     .word 0
 list_end_address:
@@ -995,6 +1093,8 @@ stored_line_number:
     .word 0
 input_buffer:
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+direct_token_buffer:
+    .byte 0,0,0,0,0,0,0,0
 integer_vars:
     .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     .word 0,0,0,0,0,0,0,0,0,0

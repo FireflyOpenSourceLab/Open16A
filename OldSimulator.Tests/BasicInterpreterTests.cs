@@ -25,12 +25,16 @@ public sealed class BasicInterpreterTests
         Machine machine = StartInterpreter();
         machine.AdvanceCycles(100_000);
 
-        SendLine(machine, "20 end");
         SendLine(machine, "10 end");
+        SendLine(machine, "20 goto 10");
 
         Assert.Equal((ushort)2, machine.Memory.ReadPhysicalWord(0x4008));
         Assert.Equal((ushort)10, machine.Memory.ReadPhysicalWord(0x400A));
         Assert.Equal((ushort)20, machine.Memory.ReadPhysicalWord(0x400F));
+        Assert.Equal((ushort)4, machine.Memory.ReadPhysicalWord(0x4011));
+        Assert.Equal((byte)0x95, machine.Memory.ReadPhysical(0x4013));
+        Assert.Equal((byte)0x82, machine.Memory.ReadPhysical(0x4014));
+        Assert.Equal((ushort)10, machine.Memory.ReadPhysicalWord(0x4015));
 
         SendLine(machine, "10 end");
         Assert.Equal((ushort)2, machine.Memory.ReadPhysicalWord(0x4008));
@@ -76,7 +80,8 @@ public sealed class BasicInterpreterTests
     {
         '0' => 0x0A, '1' => 0x01, '2' => 0x02, '3' => 0x03, '4' => 0x04,
         '5' => 0x05, '6' => 0x06, '7' => 0x07, '8' => 0x08, '9' => 0x09,
-        ' ' => 0x3B, 'd' => 0x23, 'e' => 0x13, 'n' => 0x33,
+        ' ' => 0x3B, 'd' => 0x23, 'e' => 0x13, 'g' => 0x25, 'n' => 0x33,
+        'o' => 0x19, 't' => 0x15,
         _ => throw new ArgumentOutOfRangeException(nameof(character), character, "No virtual scan-code mapping."),
     };
 
@@ -103,4 +108,5 @@ public sealed class BasicInterpreterTests
 
         throw new InvalidOperationException("Could not locate the OldSimulator project root.");
     }
+
 }
