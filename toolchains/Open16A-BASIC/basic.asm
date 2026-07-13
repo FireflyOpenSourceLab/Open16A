@@ -152,7 +152,7 @@ execute_direct:
     jmpa input_loop
 direct_command:
     li r3, 3
-    bne r2, r3, direct_error
+    bne r2, r3, direct_cls
     ld.bu r2, [r1]
     li r3, 0072h
     bne r2, r3, direct_cls
@@ -378,45 +378,6 @@ list_variable_integer:
     li r0, 0025h
     calla putc
     jmpa list_tokens
-    ld.bu r5, [r4]
-    li r6, 0091h
-    beq r5, r6, list_print
-    li r6, 009dh
-    beq r5, r6, list_end
-    li r6, 00a0h
-    beq r5, r6, list_cls
-    li r0, 003fh
-    calla putc
-    jmpa list_advance
-list_print:
-    li r1, list_print_text
-    calla puts
-    li r6, 1
-    add r4, r4, r6
-    ld.bu r5, [r4]
-    li r6, 0083h
-    bne r5, r6, list_unknown
-    li r6, 1
-    add r4, r4, r6
-    ld.bu r5, [r4]
-    add r4, r4, r6
-list_print_string:
-    li r6, 0
-    beq r5, r6, list_advance
-    ld.bu r0, [r4]
-    li r6, 1
-    add r4, r4, r6
-    sub r5, r5, r6
-    calla putc
-    jmpa list_print_string
-list_end:
-    li r1, list_end_text
-    calla puts
-    jmpa list_advance
-list_cls:
-    li r1, list_cls_text
-    calla puts
-    jmpa list_advance
 list_unknown:
     li r0, 003fh
     calla putc
@@ -461,12 +422,6 @@ parse_statement:
     ld.bu r3, [r1]
     li r4, 0
     beq r3, r4, delete_program_line
-    li r4, 0067h
-    beq r3, r4, parse_goto_line
-    li r4, 0070h
-    beq r3, r4, parse_print_line
-    li r4, 0065h
-    beq r3, r4, store_end_line
     calla tokenize_interactive_line
     li r3, 0
     beq r0, r3, direct_error
@@ -783,146 +738,9 @@ token_to_lower:
     add r0, r0, r7
 token_to_lower_done:
     ret
-parse_print_line:
-    ld.bu r3, [r1 + 1]
-    li r4, 0072h
-    bne r3, r4, direct_error
-    ld.bu r3, [r1 + 2]
-    li r4, 0069h
-    bne r3, r4, direct_error
-    ld.bu r3, [r1 + 3]
-    li r4, 006eh
-    bne r3, r4, direct_error
-    ld.bu r3, [r1 + 4]
-    li r4, 0074h
-    bne r3, r4, direct_error
-    li r4, 5
-    add r1, r1, r4
-    jmpa skip_print_spaces
-skip_print_spaces:
-    ld.bu r3, [r1]
-    li r4, 0020h
-    bne r3, r4, print_quote
-    li r4, 1
-    add r1, r1, r4
-    jmpa skip_print_spaces
-print_quote:
-    li r4, 0022h
-    bne r3, r4, direct_error
-    li r4, 1
-    add r1, r1, r4
-    mov r5, r1
-    li r6, 0
-count_print_string:
-    ld.bu r3, [r1]
-    li r4, 0022h
-    beq r3, r4, store_print_line
-    li r4, 0
-    beq r3, r4, direct_error
-    li r4, 1
-    add r1, r1, r4
-    add r6, r6, r4
-    li r4, 00ffh
-    bne r6, r4, count_print_string
-    jmpa direct_error
-store_print_line:
-    li r0, 3
-    add r0, r0, r6
-    li r1, 0091h
-    li r2, 0083h
-    calla append_program_record
-    ret
-store_end_line:
-    li r0, 1
-    li r1, 009dh
-    li r2, 0
-    li r5, 0
-    li r6, 0
-    calla append_program_record
-    ret
-
-; Tokenize the interactive form "GOTO <decimal-line>" into the same bytes
-; produced by Open16A-BASIC-PACK: GOTO, INT16, big-endian target.
-parse_goto_line:
-    ld.bu r3, [r1 + 1]
-    li r4, 006fh
-    bne r3, r4, direct_error
-    ld.bu r3, [r1 + 2]
-    li r4, 0074h
-    bne r3, r4, direct_error
-    ld.bu r3, [r1 + 3]
-    li r4, 006fh
-    bne r3, r4, direct_error
-    li r4, 4
-    add r1, r1, r4
-skip_goto_spaces:
-    ld.bu r3, [r1]
-    li r4, 0020h
-    bne r3, r4, parse_goto_target
-    li r4, 1
-    add r1, r1, r4
-    jmpa skip_goto_spaces
-parse_goto_target:
-    li r0, 0
-    li r5, 0
-parse_goto_digit:
-    ld.bu r3, [r1]
-    li r4, 0030h
-    blo r3, r4, parse_goto_done
-    li r4, 003ah
-    bhs r3, r4, parse_goto_done
-    li r4, 10
-    mul r0, r0, r4
-    li r4, 0030h
-    sub r3, r3, r4
-    add r0, r0, r3
-    li r5, 1
-    li r4, 1
-    add r1, r1, r4
-    jmpa parse_goto_digit
-parse_goto_done:
-    li r4, 0
-    beq r5, r4, direct_error
-    ld.bu r3, [r1]
-    bne r3, r4, direct_error
-    li r1, token_buffer
-    li r3, 0095h
-    st.b r3, [r1]
-    li r3, 0082h
-    st.b r3, [r1 + 1]
-    st.w r0, [r1 + 2]
-    li r0, 4
-    calla append_raw_record
-    ret
-
-; R0=token length, R1=first token, R2=second token, R5=string source, R6=string length.
-; Program records remain sorted by line number. This makes interactive editing
-; use the same B16P image the host packer emits.
-append_program_record:
-    li r3, continuation_valid
-    li r4, 0
-    st.b r4, [r3]
-    li r3, record_raw_mode
-    li r4, 0
-    st.b r4, [r3]
-    li r3, record_token_length
-    st.w r0, [r3]
-    li r3, record_first_token
-    st.b r1, [r3]
-    li r3, record_second_token
-    st.b r2, [r3]
-    li r3, record_string_source
-    st.w r5, [r3]
-    li r3, record_string_length
-    st.w r6, [r3]
-    jmpa append_program_record_begin
-
-; R0=token byte length, R1=token byte source. Used by interactive statements
-; whose payload is not a PRINT string or a one-byte END token.
+; R0=token byte length, R1=token byte source. Program records remain sorted by
+; line number and use exactly the same B16P layout as the host packer.
 append_raw_record:
-    li r3, record_raw_mode
-    li r4, 1
-    st.b r4, [r3]
     li r3, record_token_length
     st.w r0, [r3]
     li r3, record_string_source
@@ -1013,46 +831,6 @@ write_program_record:
     st.w r5, [r4 + 2]
     li r6, 4
     add r4, r4, r6
-    li r3, record_raw_mode
-    ld.bu r5, [r3]
-    li r6, 1
-    beq r5, r6, write_raw_record
-    li r5, record_first_token
-    ld.bu r5, [r5]
-    st.b r5, [r4]
-    li r6, 1
-    add r4, r4, r6
-    li r5, record_token_length
-    ld.w r5, [r5]
-    li r6, 1
-    beq r5, r6, write_record_finish
-    li r5, record_second_token
-    ld.bu r5, [r5]
-    st.b r5, [r4]
-    add r4, r4, r6
-    li r5, record_string_length
-    ld.w r5, [r5]
-    st.b r5, [r4]
-    add r4, r4, r6
-    li r5, record_string_source
-    ld.w r5, [r5]
-write_string_bytes:
-    li r6, record_string_length
-    ld.w r6, [r6]
-    li r7, 0
-    beq r6, r7, write_record_finish
-    ld.bu r7, [r5]
-    st.b r7, [r4]
-    li r7, 1
-    add r5, r5, r7
-    add r4, r4, r7
-    li r6, record_string_length
-    ld.w r7, [r6]
-    li r3, 1
-    sub r7, r7, r3
-    st.w r7, [r6]
-    jmpa write_string_bytes
-write_raw_record:
     li r5, record_string_source
     ld.w r5, [r5]
     li r6, record_token_length
@@ -1156,8 +934,7 @@ maybe_autorun:
 autorun_done:
     ret
 
-; Interpret the B16P program header at 4000h and dispatch the complete
-; Open16A BASIC 1.0 statement set.
+; Interpret the B16P program header at 4000h and dispatch Open16A BASIC 1.1.
 run_program:
     li r3, continuation_valid
     li r5, 0
@@ -1210,6 +987,8 @@ run_token_dispatch:
     beq r0, r3, run_input
     li r3, 0090h
     beq r0, r3, run_let
+    li r3, 0084h
+    beq r0, r3, run_implicit_let
     li r3, 0093h
     beq r0, r3, run_if
     li r3, 0095h
@@ -1244,6 +1023,22 @@ run_token_dispatch:
     beq r0, r3, run_done
     li r3, 009eh
     beq r0, r3, run_stop
+    li r3, 00bah
+    beq r0, r3, run_screen
+    li r3, 00bbh
+    beq r0, r3, run_pset
+    li r3, 00bch
+    beq r0, r3, run_preset
+    li r3, 00bdh
+    beq r0, r3, run_line_graphics
+    li r3, 00beh
+    beq r0, r3, run_circle
+    li r3, 00bfh
+    beq r0, r3, run_palette
+    li r3, 00c0h
+    beq r0, r3, run_present
+    li r3, 00c1h
+    beq r0, r3, run_out
     li r3, 003ah
     beq r0, r3, run_token
     li r1, syntax_text
@@ -1264,6 +1059,11 @@ run_print_numeric:
     calla read_integer
     calla print_integer
     jmpa print_after_item
+
+run_implicit_let:
+    li r3, 1
+    sub r1, r1, r3
+    jmpa run_let
 
 run_input:
     ld.bu r3, [r1]
@@ -2204,6 +2004,10 @@ read_primary:
     beq r0, r3, read_len_function
     li r3, 00ach
     beq r0, r3, read_val_function
+    li r3, 00c2h
+    beq r0, r3, read_inp_function
+    li r3, 00c3h
+    beq r0, r3, read_point_function
     jmpa read_integer_invalid
 read_integer_variable:
     ld.bu r5, [r1]
@@ -2392,6 +2196,20 @@ read_val_expect_close:
     li r3, 1
     add r1, r1, r3
     ret
+read_inp_function:
+    calla read_function_argument
+    mov r5, r0
+    li r6, dynamic_in
+    st.w r5, [r6 + 2]
+dynamic_in:
+    in r0, 0000h
+    ret
+read_point_function:
+    calla parse_graphics_xy
+    li r3, 1
+    bne r0, r3, read_integer_invalid
+    calla graphics_get_pixel
+    ret
 read_function_argument:
     ld.bu r3, [r1]
     li r5, 0028h
@@ -2410,6 +2228,641 @@ read_integer_invalid:
     li r5, 1
     st.b r5, [r3]
     li r0, 0
+    ret
+
+; BASIC 1.1 device and graphics statements. Coordinates outside the selected
+; mode are clipped. Mode 2 colors are packed RGBA4444 values.
+run_out:
+    calla read_integer
+    li r3, io_port
+    st.w r0, [r3]
+    ld.bu r3, [r1]
+    li r5, 002ch
+    bne r3, r5, run_syntax
+    li r3, 1
+    add r1, r1, r3
+    calla read_integer
+    li r3, io_port
+    ld.w r5, [r3]
+    li r6, dynamic_out
+    st.w r5, [r6 + 2]
+dynamic_out:
+    out 0000h, r0
+    jmpa run_token
+
+run_screen:
+    calla read_integer
+    li r3, 3
+    bhs r0, r3, run_syntax
+    li r3, graphics_mode
+    st.b r0, [r3]
+    calla graphics_clear
+    jmpa run_token
+run_present:
+    li r3, graphics_mode
+    ld.bu r0, [r3]
+    out 0020h, r0
+    jmpa run_token
+run_palette:
+    calla read_integer
+    out 0022h, r0
+    li r7, 3
+run_palette_component:
+    ld.bu r3, [r1]
+    li r5, 002ch
+    bne r3, r5, run_syntax
+    li r3, 1
+    add r1, r1, r3
+    push r7
+    calla read_integer
+    pop r7
+    out 0023h, r0
+    li r3, 1
+    sub r7, r7, r3
+    li r3, 0
+    bne r7, r3, run_palette_component
+    jmpa run_token
+
+run_pset:
+    calla parse_graphics_xy
+    li r3, 1
+    bne r0, r3, run_syntax
+    ld.bu r3, [r1]
+    li r5, 002ch
+    bne r3, r5, run_syntax
+    li r3, 1
+    add r1, r1, r3
+    calla read_integer
+    li r3, graphics_color
+    st.w r0, [r3]
+    calla graphics_set_pixel
+    jmpa run_token
+run_preset:
+    calla parse_graphics_xy
+    li r3, 1
+    bne r0, r3, run_syntax
+    li r0, 0
+    ld.bu r3, [r1]
+    li r5, 002ch
+    bne r3, r5, run_preset_color_ready
+    li r3, 1
+    add r1, r1, r3
+    calla read_integer
+run_preset_color_ready:
+    li r3, graphics_color
+    st.w r0, [r3]
+    calla graphics_set_pixel
+    jmpa run_token
+
+; Parses (x,y), stores both words, and returns R0=1 on success.
+parse_graphics_xy:
+    ld.bu r3, [r1]
+    li r5, 0028h
+    bne r3, r5, parse_graphics_xy_fail
+    li r3, 1
+    add r1, r1, r3
+    calla read_integer
+    li r3, graphics_x
+    st.w r0, [r3]
+    ld.bu r3, [r1]
+    li r5, 002ch
+    bne r3, r5, parse_graphics_xy_fail
+    li r3, 1
+    add r1, r1, r3
+    calla read_integer
+    li r3, graphics_y
+    st.w r0, [r3]
+    ld.bu r3, [r1]
+    li r5, 0029h
+    bne r3, r5, parse_graphics_xy_fail
+    li r3, 1
+    add r1, r1, r3
+    li r0, 1
+    ret
+parse_graphics_xy_fail:
+    li r0, 0
+    ret
+
+run_line_graphics:
+    calla parse_graphics_xy
+    li r3, 1
+    bne r0, r3, run_syntax
+    li r3, graphics_x
+    ld.w r0, [r3]
+    li r5, line_x
+    st.w r0, [r5]
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r5, line_y
+    st.w r0, [r5]
+    ld.bu r3, [r1]
+    li r5, 002dh
+    bne r3, r5, run_syntax
+    li r3, 1
+    add r1, r1, r3
+    calla parse_graphics_xy
+    li r3, 1
+    bne r0, r3, run_syntax
+    li r3, graphics_x
+    ld.w r0, [r3]
+    li r5, line_x2
+    st.w r0, [r5]
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r5, line_y2
+    st.w r0, [r5]
+    ld.bu r3, [r1]
+    li r5, 002ch
+    bne r3, r5, run_syntax
+    li r3, 1
+    add r1, r1, r3
+    calla read_integer
+    li r3, graphics_color
+    st.w r0, [r3]
+    calla graphics_line_prepare
+graphics_line_loop:
+    li r3, line_x
+    ld.w r0, [r3]
+    li r5, graphics_x
+    st.w r0, [r5]
+    li r3, line_y
+    ld.w r0, [r3]
+    li r5, graphics_y
+    st.w r0, [r5]
+    calla graphics_set_pixel
+    li r3, line_x
+    ld.w r5, [r3]
+    li r3, line_x2
+    ld.w r6, [r3]
+    bne r5, r6, graphics_line_step
+    li r3, line_y
+    ld.w r5, [r3]
+    li r3, line_y2
+    ld.w r6, [r3]
+    beq r5, r6, graphics_line_done
+graphics_line_step:
+    li r3, line_error
+    ld.w r5, [r3]
+    add r7, r5, r5
+    li r3, line_dy
+    ld.w r6, [r3]
+    blt r7, r6, graphics_line_y_step
+    add r5, r5, r6
+    li r3, line_error
+    st.w r5, [r3]
+    li r3, line_x
+    ld.w r5, [r3]
+    li r3, line_sx
+    ld.w r6, [r3]
+    add r5, r5, r6
+    li r3, line_x
+    st.w r5, [r3]
+graphics_line_y_step:
+    li r3, line_dx
+    ld.w r6, [r3]
+    bgt r7, r6, graphics_line_loop
+    li r3, line_error
+    ld.w r5, [r3]
+    add r5, r5, r6
+    st.w r5, [r3]
+    li r3, line_y
+    ld.w r5, [r3]
+    li r3, line_sy
+    ld.w r6, [r3]
+    add r5, r5, r6
+    li r3, line_y
+    st.w r5, [r3]
+    jmpa graphics_line_loop
+graphics_line_done:
+    jmpa run_token
+
+graphics_line_prepare:
+    li r3, line_x2
+    ld.w r6, [r3]
+    li r3, line_x
+    ld.w r5, [r3]
+    sub r0, r6, r5
+    li r7, 1
+    bge r0, r7, graphics_line_sx_ready
+    li r7, -1
+    neg r0, r0
+graphics_line_sx_ready:
+    li r3, line_sx
+    st.w r7, [r3]
+    li r3, line_dx
+    st.w r0, [r3]
+    li r3, line_y2
+    ld.w r6, [r3]
+    li r3, line_y
+    ld.w r5, [r3]
+    sub r0, r6, r5
+    li r7, 1
+    bge r0, r7, graphics_line_sy_ready
+    li r7, -1
+    neg r0, r0
+graphics_line_sy_ready:
+    li r3, line_sy
+    st.w r7, [r3]
+    neg r0, r0
+    li r3, line_dy
+    st.w r0, [r3]
+    li r3, line_dx
+    ld.w r5, [r3]
+    add r0, r0, r5
+    li r3, line_error
+    st.w r0, [r3]
+    ret
+
+run_circle:
+    calla parse_graphics_xy
+    li r3, 1
+    bne r0, r3, run_syntax
+    li r3, graphics_x
+    ld.w r0, [r3]
+    li r5, circle_cx
+    st.w r0, [r5]
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r5, circle_cy
+    st.w r0, [r5]
+    ld.bu r3, [r1]
+    li r5, 002ch
+    bne r3, r5, run_syntax
+    li r3, 1
+    add r1, r1, r3
+    calla read_integer
+    li r3, 0
+    blt r0, r3, run_syntax
+    li r3, circle_x
+    st.w r0, [r3]
+    li r5, 1
+    sub r0, r5, r0
+    li r3, circle_error
+    st.w r0, [r3]
+    li r3, circle_y
+    li r0, 0
+    st.w r0, [r3]
+    ld.bu r3, [r1]
+    li r5, 002ch
+    bne r3, r5, run_syntax
+    li r3, 1
+    add r1, r1, r3
+    calla read_integer
+    li r3, graphics_color
+    st.w r0, [r3]
+graphics_circle_loop:
+    li r3, circle_x
+    ld.w r5, [r3]
+    li r3, circle_y
+    ld.w r6, [r3]
+    blt r5, r6, graphics_circle_done
+    li r3, circle_plot_dx
+    st.w r5, [r3]
+    li r3, circle_plot_dy
+    st.w r6, [r3]
+    calla graphics_circle_plot_four
+    li r3, circle_x
+    ld.w r5, [r3]
+    li r3, circle_plot_dy
+    st.w r5, [r3]
+    li r3, circle_y
+    ld.w r6, [r3]
+    li r3, circle_plot_dx
+    st.w r6, [r3]
+    calla graphics_circle_plot_four
+    li r3, circle_y
+    ld.w r5, [r3]
+    li r6, 1
+    add r5, r5, r6
+    st.w r5, [r3]
+    li r3, circle_error
+    ld.w r5, [r3]
+    li r6, 0
+    blt r5, r6, graphics_circle_error_negative
+    li r3, circle_x
+    ld.w r6, [r3]
+    li r7, 1
+    sub r6, r6, r7
+    st.w r6, [r3]
+    li r3, circle_y
+    ld.w r7, [r3]
+    sub r7, r7, r6
+    add r7, r7, r7
+    li r6, 1
+    add r7, r7, r6
+    add r7, r7, r5
+    li r3, circle_error
+    st.w r7, [r3]
+    jmpa graphics_circle_loop
+graphics_circle_error_negative:
+    li r3, circle_y
+    ld.w r6, [r3]
+    add r6, r6, r6
+    li r7, 1
+    add r6, r6, r7
+    add r5, r5, r6
+    li r3, circle_error
+    st.w r5, [r3]
+    jmpa graphics_circle_loop
+graphics_circle_done:
+    jmpa run_token
+
+; Draws the four sign combinations of circle_plot_dx/circle_plot_dy.
+graphics_circle_plot_four:
+    li r3, circle_cx
+    ld.w r5, [r3]
+    li r3, circle_plot_dx
+    ld.w r6, [r3]
+    add r0, r5, r6
+    li r3, graphics_x
+    st.w r0, [r3]
+    li r3, circle_cy
+    ld.w r5, [r3]
+    li r3, circle_plot_dy
+    ld.w r6, [r3]
+    add r0, r5, r6
+    li r3, graphics_y
+    st.w r0, [r3]
+    calla graphics_set_pixel
+    li r3, circle_cx
+    ld.w r5, [r3]
+    li r3, circle_plot_dx
+    ld.w r6, [r3]
+    sub r0, r5, r6
+    li r3, graphics_x
+    st.w r0, [r3]
+    calla graphics_set_pixel
+    li r3, circle_cy
+    ld.w r5, [r3]
+    li r3, circle_plot_dy
+    ld.w r6, [r3]
+    sub r0, r5, r6
+    li r3, graphics_y
+    st.w r0, [r3]
+    calla graphics_set_pixel
+    li r3, circle_cx
+    ld.w r5, [r3]
+    li r3, circle_plot_dx
+    ld.w r6, [r3]
+    add r0, r5, r6
+    li r3, graphics_x
+    st.w r0, [r3]
+    calla graphics_set_pixel
+    ret
+
+graphics_clear:
+    push r1
+    push r2
+    push r4
+    rdsg r7
+    push r7
+    li r5, 003dh
+graphics_clear_page:
+    wrsg r5
+    li r6, 0c000h
+    li r7, 04000h
+    li r0, 0
+graphics_clear_byte:
+    st.b r0, [r6]
+    li r3, 1
+    add r6, r6, r3
+    sub r7, r7, r3
+    li r3, 0
+    bne r7, r3, graphics_clear_byte
+    li r3, 1
+    add r5, r5, r3
+    li r3, 0040h
+    bne r5, r3, graphics_clear_page
+    pop r7
+    wrsg r7
+    pop r4
+    pop r2
+    pop r1
+    ret
+
+; Maps a 0..BFFFh VRAM byte offset into SG and returns logical address in R6.
+graphics_map_offset:
+    li r7, 14
+    shr r5, r0, r7
+    li r7, 003dh
+    add r5, r5, r7
+    wrsg r5
+    li r6, 03fffh
+    and r6, r0, r6
+    li r7, 0c000h
+    or r6, r6, r7
+    ret
+
+graphics_set_pixel:
+    push r1
+    push r2
+    push r4
+    rdsg r7
+    push r7
+    li r3, graphics_mode
+    ld.bu r3, [r3]
+    li r5, 0
+    beq r3, r5, graphics_set_mode0
+    li r5, 1
+    beq r3, r5, graphics_set_mode1
+    li r3, graphics_x
+    ld.w r5, [r3]
+    li r6, 128
+    bhs r5, r6, graphics_set_done
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r6, 96
+    bhs r0, r6, graphics_set_done
+    li r6, 9
+    shl r0, r0, r6
+    li r6, 2
+    shl r5, r5, r6
+    add r0, r0, r5
+    calla graphics_map_offset
+    li r3, graphics_color
+    ld.w r5, [r3]
+    li r7, 12
+    shr r0, r5, r7
+    li r7, 17
+    mul r0, r0, r7
+    st.b r0, [r6]
+    li r7, 8
+    shr r0, r5, r7
+    li r7, 000fh
+    and r0, r0, r7
+    li r7, 17
+    mul r0, r0, r7
+    st.b r0, [r6 + 1]
+    li r7, 4
+    shr r0, r5, r7
+    li r7, 000fh
+    and r0, r0, r7
+    li r7, 17
+    mul r0, r0, r7
+    st.b r0, [r6 + 2]
+    li r7, 000fh
+    and r0, r5, r7
+    li r7, 17
+    mul r0, r0, r7
+    st.b r0, [r6 + 3]
+    jmpa graphics_set_done
+graphics_set_mode0:
+    li r3, graphics_x
+    ld.w r5, [r3]
+    li r6, 256
+    bhs r5, r6, graphics_set_done
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r6, 192
+    bhs r0, r6, graphics_set_done
+    li r6, 8
+    shl r0, r0, r6
+    add r0, r0, r5
+    calla graphics_map_offset
+    li r3, graphics_color
+    ld.w r5, [r3]
+    st.b r5, [r6]
+    jmpa graphics_set_done
+graphics_set_mode1:
+    li r3, graphics_x
+    ld.w r5, [r3]
+    li r6, 512
+    bhs r5, r6, graphics_set_done
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r6, 384
+    bhs r0, r6, graphics_set_done
+    li r6, 7
+    shl r0, r0, r6
+    li r6, 2
+    shr r7, r5, r6
+    add r0, r0, r7
+    calla graphics_map_offset
+    ld.bu r0, [r6]
+    li r3, graphics_x
+    ld.w r5, [r3]
+    li r7, 3
+    and r5, r5, r7
+    li r7, 3
+    sub r5, r7, r5
+    li r7, 1
+    shl r5, r5, r7
+    li r7, 3
+    shl r7, r7, r5
+    not r7, r7
+    and r0, r0, r7
+    li r3, graphics_color
+    ld.w r7, [r3]
+    li r3, 3
+    and r7, r7, r3
+    shl r7, r7, r5
+    or r0, r0, r7
+    st.b r0, [r6]
+graphics_set_done:
+    pop r7
+    wrsg r7
+    pop r4
+    pop r2
+    pop r1
+    ret
+
+graphics_get_pixel:
+    push r1
+    push r2
+    push r4
+    rdsg r7
+    push r7
+    li r3, graphics_mode
+    ld.bu r3, [r3]
+    li r5, 0
+    beq r3, r5, graphics_get_mode0
+    li r5, 1
+    beq r3, r5, graphics_get_mode1
+    li r3, graphics_x
+    ld.w r5, [r3]
+    li r6, 128
+    bhs r5, r6, graphics_get_zero
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r6, 96
+    bhs r0, r6, graphics_get_zero
+    li r6, 9
+    shl r0, r0, r6
+    li r6, 2
+    shl r5, r5, r6
+    add r0, r0, r5
+    calla graphics_map_offset
+    ld.bu r5, [r6]
+    li r7, 00f0h
+    and r5, r5, r7
+    li r7, 8
+    shl r5, r5, r7
+    ld.bu r0, [r6 + 1]
+    li r7, 00f0h
+    and r0, r0, r7
+    li r7, 4
+    shl r0, r0, r7
+    or r5, r5, r0
+    ld.bu r0, [r6 + 2]
+    li r7, 00f0h
+    and r0, r0, r7
+    or r5, r5, r0
+    ld.bu r0, [r6 + 3]
+    li r7, 4
+    shr r0, r0, r7
+    or r0, r5, r0
+    jmpa graphics_get_done
+graphics_get_mode0:
+    li r3, graphics_x
+    ld.w r5, [r3]
+    li r6, 256
+    bhs r5, r6, graphics_get_zero
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r6, 192
+    bhs r0, r6, graphics_get_zero
+    li r6, 8
+    shl r0, r0, r6
+    add r0, r0, r5
+    calla graphics_map_offset
+    ld.bu r0, [r6]
+    jmpa graphics_get_done
+graphics_get_mode1:
+    li r3, graphics_x
+    ld.w r5, [r3]
+    li r6, 512
+    bhs r5, r6, graphics_get_zero
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r6, 384
+    bhs r0, r6, graphics_get_zero
+    li r6, 7
+    shl r0, r0, r6
+    li r6, 2
+    shr r7, r5, r6
+    add r0, r0, r7
+    calla graphics_map_offset
+    ld.bu r0, [r6]
+    li r3, graphics_x
+    ld.w r5, [r3]
+    li r7, 3
+    and r5, r5, r7
+    li r7, 3
+    sub r5, r7, r5
+    li r7, 1
+    shl r5, r5, r7
+    shr r0, r0, r5
+    li r7, 3
+    and r0, r0, r7
+    jmpa graphics_get_done
+graphics_get_zero:
+    li r0, 0
+graphics_get_done:
+    pop r7
+    wrsg r7
+    pop r4
+    pop r2
+    pop r1
     ret
 
 run_cls:
@@ -2624,7 +3077,7 @@ keyboard_check_done:
     ret
 
 banner_text:
-    .byte 'O','P','E','N','1','6','A',' ','B','A','S','I','C',' ','1','.','0',10,0
+    .byte 'O','P','E','N','1','6','A',' ','B','A','S','I','C',' ','1','.','1',10,0
 ready_text:
     .byte 'R','E','A','D','Y','.',10,0
 syntax_text:
@@ -2637,26 +3090,12 @@ no_program_text:
     .byte '?','N','O',' ','P','R','O','G','R','A','M',10,0
 program_full_text:
     .byte '?','P','R','O','G','R','A','M',' ','F','U','L','L',10,0
-list_print_text:
-    .byte 'P','R','I','N','T',' ',0
-list_end_text:
-    .byte 'E','N','D',0
-list_cls_text:
-    .byte 'C','L','S',0
 record_token_length:
     .word 0
 record_string_source:
     .word 0
-record_string_length:
-    .word 0
 insert_position:
     .word 0
-record_first_token:
-    .byte 0
-record_second_token:
-    .byte 0
-record_raw_mode:
-    .byte 0
 break_requested:
     .byte 0
 list_next:
@@ -2764,6 +3203,48 @@ continuation_program_end:
     .word 0
 continuation_line_end:
     .word 0
+io_port:
+    .word 0
+graphics_mode:
+    .byte 0
+graphics_x:
+    .word 0
+graphics_y:
+    .word 0
+graphics_color:
+    .word 0
+line_x:
+    .word 0
+line_y:
+    .word 0
+line_x2:
+    .word 0
+line_y2:
+    .word 0
+line_dx:
+    .word 0
+line_dy:
+    .word 0
+line_sx:
+    .word 0
+line_sy:
+    .word 0
+line_error:
+    .word 0
+circle_cx:
+    .word 0
+circle_cy:
+    .word 0
+circle_x:
+    .word 0
+circle_y:
+    .word 0
+circle_error:
+    .word 0
+circle_plot_dx:
+    .word 0
+circle_plot_dy:
+    .word 0
 token_buffer:
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -2783,27 +3264,23 @@ token_keyword_table:
     .byte 09eh,4,'s','t','o','p', 09fh,3,'d','i','m', 0a0h,3,'c','l','s'
     .byte 0a1h,5,'c','o','l','o','r', 0a2h,6,'l','o','c','a','t','e'
     .byte 0a3h,3,'a','b','s', 0a4h,3,'i','n','t', 0a5h,3,'s','g','n'
-    .byte 0a6h,3,'l','e','n', 0a7h,5,'l','e','f','t','$'
-    .byte 0a8h,6,'r','i','g','h','t','$', 0a9h,4,'m','i','d','$'
-    .byte 0aah,4,'c','h','r','$', 0abh,4,'s','t','r','$', 0ach,3,'v','a','l'
+    .byte 0a6h,3,'l','e','n', 0ach,3,'v','a','l'
     .byte 0adh,3,'a','n','d', 0aeh,2,'o','r', 0afh,3,'n','o','t'
     .byte 0b0h,3,'r','u','n', 0b1h,4,'l','i','s','t', 0b2h,3,'n','e','w'
     .byte 0b3h,4,'p','e','e','k', 0b4h,4,'p','o','k','e', 0b5h,4,'e','l','s','e'
     .byte 0b6h,4,'d','a','t','a', 0b7h,4,'r','e','a','d'
-    .byte 0b8h,7,'r','e','s','t','o','r','e', 0b9h,4,'c','o','n','t', 0
+    .byte 0b8h,7,'r','e','s','t','o','r','e', 0b9h,4,'c','o','n','t'
+    .byte 0bah,6,'s','c','r','e','e','n', 0bbh,4,'p','s','e','t'
+    .byte 0bch,6,'p','r','e','s','e','t', 0bdh,4,'l','i','n','e'
+    .byte 0beh,6,'c','i','r','c','l','e', 0bfh,7,'p','a','l','e','t','t','e'
+    .byte 0c0h,7,'p','r','e','s','e','n','t', 0c1h,3,'o','u','t'
+    .byte 0c2h,3,'i','n','p', 0c3h,5,'p','o','i','n','t', 0
 integer_vars:
     .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     .word 0,0,0,0,0,0,0,0,0,0
 numeric_vars:
     .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     .word 0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
 ; scan 00h-3Eh, unshifted then shifted. Zero denotes a non-text key.
 key_lower:

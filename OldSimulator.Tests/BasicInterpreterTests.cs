@@ -79,6 +79,22 @@ public sealed class BasicInterpreterTests
     }
 
     [Fact]
+    public void LowercaseListDirectCommandListsTheProgram()
+    {
+        Machine machine = StartInterpreter();
+        machine.AdvanceCycles(100_000);
+        SendLine(machine, "10 end");
+
+        SendLine(machine, "list");
+
+        // LIST writes line number '1' at the first cell of text row 2. A
+        // syntax error would write '?', whose first column has pixel y+1 set.
+        Assert.Equal((byte)0, machine.Memory.ReadPhysical(0xF4000u + 17u * 256u));
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
     public void ExecutesIntegerExpressionsWithMicrosoftBasicPrecedence()
     {
         Machine machine = StartInterpreter();
@@ -176,6 +192,83 @@ public sealed class BasicInterpreterTests
         Assert.True(machine.Cpu.Halted);
     }
 
+    [Fact]
+    public void InpAndOutAccessTheOpen16aIoBus()
+    {
+        Machine machine = StartInterpreter();
+        ushort written = 0;
+        machine.IoBus.RegisterRead(0x50, () => 0x1234);
+        machine.IoBus.RegisterWrite(0x51, value => written = value);
+        WritePackedProgram(machine.Memory,
+            "10 LET A=INP(80)\n20 OUT 81,A+1\n30 POKE 9600,A\n40 END");
+
+        machine.AdvanceCycles(300_000);
+        machine.AdvanceCycles(10_000);
+
+        Assert.Equal((ushort)0x1235, written);
+        Assert.Equal((byte)0x34, machine.Memory.ReadPhysical(9600));
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
+    public void GraphicsCommandsDrawIndexedPixelsLinesAndCircles()
+    {
+        Machine machine = StartInterpreter();
+        WritePackedProgram(machine.Memory,
+            "10 SCREEN 0\n20 PSET (5,3),12\n30 LINE (1,1)-(4,4),9\n" +
+            "40 CIRCLE (100,100),3,7\n50 PRESENT\n60 END");
+
+        machine.AdvanceCycles(2_000_000);
+        machine.AdvanceCycles(10_000);
+
+        Assert.True(machine.Cpu.Halted, $"PC={machine.Cpu.PC:X4}, fault={machine.Cpu.FaultCode}");
+        Assert.Equal((byte)12, machine.Memory.ReadPhysical(0xF4000u + 3u * 256u + 5u));
+        Assert.Equal((byte)9, machine.Memory.ReadPhysical(0xF4000u + 2u * 256u + 2u));
+        Assert.Equal((byte)7, machine.Memory.ReadPhysical(0xF4000u + 100u * 256u + 103u));
+        Assert.Equal((byte)7, machine.Memory.ReadPhysical(0xF4000u + 103u * 256u + 100u));
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
+    public void PsetAndPointSupportPackedAndRgbaVideoModes()
+    {
+        Machine packed = StartInterpreter();
+        WritePackedProgram(packed.Memory,
+            "10 SCREEN 1\n20 PSET (7,2),3\n25 PRESET (8,2),2\n" +
+            "30 POKE 9700,POINT(7,2)\n35 POKE 9702,POINT(8,2)\n40 END");
+        packed.AdvanceCycles(1_000_000);
+
+        Assert.Equal((byte)3, packed.Memory.ReadPhysical(9700));
+        Assert.Equal((byte)2, packed.Memory.ReadPhysical(9702));
+        Assert.Equal((byte)0x03, packed.Memory.ReadPhysical(0xF4000u + 2u * 128u + 1u));
+
+        Machine rgba = StartInterpreter();
+        WritePackedProgram(rgba.Memory,
+            "10 SCREEN 2\n20 PSET (2,1),4660\n30 A=POINT(2,1)\n40 POKE 9701,A\n50 END");
+        rgba.AdvanceCycles(1_000_000);
+        rgba.AdvanceCycles(10_000);
+
+        uint address = 0xF4000u + 1u * 512u + 2u * 4u;
+        Assert.Equal(new byte[] { 0x11, 0x22, 0x33, 0x44 },
+            Enumerable.Range(0, 4).Select(offset => rgba.Memory.ReadPhysical(address + (uint)offset)).ToArray());
+        Assert.Equal((byte)0x34, rgba.Memory.ReadPhysical(9701));
+        Assert.True(rgba.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, rgba.Cpu.FaultCode);
+    }
+
+    [Fact]
+    public void PaletteCommandProgramsTheVideoDac()
+    {
+        Machine machine = StartInterpreter();
+        WritePackedProgram(machine.Memory, "10 PALETTE 42,18,52,86\n20 END");
+
+        machine.AdvanceCycles(200_000);
+
+        Assert.Equal(new Rgb24(18, 52, 86), machine.Video.GetPaletteEntry(42));
+        Assert.True(machine.Cpu.Halted);
+    }
+
     private static Machine StartInterpreter()
     {
         string root = FindProjectRoot();
@@ -211,7 +304,8 @@ public sealed class BasicInterpreterTests
         '0' => 0x0A, '1' => 0x01, '2' => 0x02, '3' => 0x03, '4' => 0x04,
         '5' => 0x05, '6' => 0x06, '7' => 0x07, '8' => 0x08, '9' => 0x09,
         ' ' => 0x3B, '=' => 0x0C, 'a' => 0x21, 'd' => 0x23, 'e' => 0x13,
-        'g' => 0x25, 'l' => 0x29, 'n' => 0x33, 'o' => 0x19, 't' => 0x15,
+        'g' => 0x25, 'i' => 0x18, 'l' => 0x29, 'n' => 0x33, 'o' => 0x19,
+        's' => 0x22, 't' => 0x15,
         _ => throw new ArgumentOutOfRangeException(nameof(character), character, "No virtual scan-code mapping."),
     };
 

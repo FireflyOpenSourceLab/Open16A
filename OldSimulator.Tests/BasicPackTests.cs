@@ -52,4 +52,22 @@ public sealed class BasicPackTests
         Assert.Contains(BasicProgramFormat.IntegerLiteral, tokens);
         Assert.Contains(BasicProgramFormat.StringLiteral, tokens);
     }
+
+    [Fact]
+    public void EncodesBasic11GraphicsAndIoKeywords()
+    {
+        byte[] tokens = BasicTokenizer.Tokenize(
+            "SCREEN 0: PSET (1,2),3: LINE (0,0)-(4,4),5: CIRCLE (8,8),3,6: " +
+            "PALETTE 1,2,3,4: PRESENT: OUT 80,INP(81): A=POINT(1,2)");
+
+        Assert.Contains(BasicProgramFormat.Screen, tokens);
+        Assert.Contains(BasicProgramFormat.Pset, tokens);
+        Assert.Contains(BasicProgramFormat.Line, tokens);
+        Assert.Contains(BasicProgramFormat.Circle, tokens);
+        Assert.Contains(BasicProgramFormat.Palette, tokens);
+        Assert.Contains(BasicProgramFormat.Present, tokens);
+        Assert.Contains(BasicProgramFormat.Out, tokens);
+        Assert.Contains(BasicProgramFormat.Inp, tokens);
+        Assert.Contains(BasicProgramFormat.Point, tokens);
+    }
 }

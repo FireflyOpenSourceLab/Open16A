@@ -28,6 +28,16 @@ public static class BasicProgramFormat
     public const byte Read = 0xB7;
     public const byte Restore = 0xB8;
     public const byte Cont = 0xB9;
+    public const byte Screen = 0xBA;
+    public const byte Pset = 0xBB;
+    public const byte Preset = 0xBC;
+    public const byte Line = 0xBD;
+    public const byte Circle = 0xBE;
+    public const byte Palette = 0xBF;
+    public const byte Present = 0xC0;
+    public const byte Out = 0xC1;
+    public const byte Inp = 0xC2;
+    public const byte Point = 0xC3;
 }
 
 public sealed record BasicProgramLine(ushort Number, byte[] Tokens);
@@ -76,7 +86,12 @@ public static class BasicTokenizer
         ["NOT"] = 0xAF, ["RUN"] = 0xB0, ["LIST"] = 0xB1, ["NEW"] = 0xB2,
         ["PEEK"] = 0xB3, ["POKE"] = 0xB4, ["ELSE"] = 0xB5,
         ["DATA"] = BasicProgramFormat.Data, ["READ"] = BasicProgramFormat.Read,
-        ["RESTORE"] = BasicProgramFormat.Restore, ["CONT"] = BasicProgramFormat.Cont
+        ["RESTORE"] = BasicProgramFormat.Restore, ["CONT"] = BasicProgramFormat.Cont,
+        ["SCREEN"] = BasicProgramFormat.Screen, ["PSET"] = BasicProgramFormat.Pset,
+        ["PRESET"] = BasicProgramFormat.Preset, ["LINE"] = BasicProgramFormat.Line,
+        ["CIRCLE"] = BasicProgramFormat.Circle, ["PALETTE"] = BasicProgramFormat.Palette,
+        ["PRESENT"] = BasicProgramFormat.Present, ["OUT"] = BasicProgramFormat.Out,
+        ["INP"] = BasicProgramFormat.Inp, ["POINT"] = BasicProgramFormat.Point
     };
 
     public static BasicProgramImage ParseProgram(string source, bool autoRun = false)
@@ -236,7 +251,7 @@ public static class BasicTokenizer
             tokens.Add((byte)integerValue);
             return;
         }
-        throw Error(sourceLine, $"Open16A BASIC 1.0 supports only -32768..32767 integer literals, got '{literal}'.");
+        throw Error(sourceLine, $"Open16A BASIC 1.1 supports only -32768..32767 integer literals, got '{literal}'.");
     }
 
     private static void SkipWhitespace(string text, ref int index)
