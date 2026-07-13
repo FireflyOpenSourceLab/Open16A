@@ -33,8 +33,7 @@ entry_clear_numeric_variables:
 ready:
     li r1, ready_text
     calla puts
-    li r0, 0
-    out 0020h, r0
+    calla present_current_mode
     li r0, 0
     li r1, input_length
     st.b r0, [r1]
@@ -83,8 +82,7 @@ select_key:
     jmpa input_loop
 
 input_wait:
-    li r0, 0
-    out 0020h, r0
+    calla present_current_mode
     halt
     jmpa input_loop
 
@@ -177,7 +175,7 @@ direct_cls:
     bne r0, r3, direct_new
     li r0, 0
     out 0037h, r0
-    out 0020h, r0
+    calla present_current_mode
     ret
 direct_new:
     li r3, 00b2h
@@ -2168,10 +2166,13 @@ run_screen:
     calla graphics_clear
     jmpa run_token
 run_present:
+    calla present_current_mode
+    jmpa run_token
+present_current_mode:
     li r3, graphics_mode
     ld.bu r0, [r3]
     out 0020h, r0
-    jmpa run_token
+    ret
 run_palette:
     calla read_integer
     out 0022h, r0
@@ -2812,8 +2813,7 @@ run_syntax:
     calla puts
     ret
 run_done:
-    li r0, 0
-    out 0020h, r0
+    calla present_current_mode
     ret
 run_stop:
     li r3, continuation_cursor

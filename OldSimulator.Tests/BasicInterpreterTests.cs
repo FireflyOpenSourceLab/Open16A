@@ -90,6 +90,24 @@ public sealed class BasicInterpreterTests
     }
 
     [Fact]
+    public void ReplUsesTheSharedTokenFormatForLineGraphics()
+    {
+        Machine machine = StartInterpreter();
+        machine.AdvanceCycles(100_000);
+        const string statement = "line (0,0)-(20,20),80";
+
+        SendLine(machine, $"10 {statement}");
+
+        byte[] expected = BasicTokenizer.Tokenize(statement);
+        Assert.Equal((ushort)expected.Length, machine.Memory.ReadPhysicalWord(0x400C));
+        Assert.Equal(expected,
+            Enumerable.Range(0, expected.Length)
+                .Select(index => machine.Memory.ReadPhysical(0x400Eu + (uint)index)).ToArray());
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
     public void LowercaseListDirectCommandListsTheProgram()
     {
         Machine machine = StartInterpreter();
@@ -257,6 +275,42 @@ public sealed class BasicInterpreterTests
     }
 
     [Fact]
+    public void LineHandlesZeroCoordinatesAndClipsADeepVerticalSegment()
+    {
+        Machine machine = StartInterpreter();
+        WritePackedProgram(machine.Memory,
+            "10 LINE (0,0)-(20,20),80\n20 LINE (50,50)-(50,250),86\n30 END");
+
+        machine.AdvanceCycles(2_000_000);
+        machine.AdvanceCycles(10_000);
+
+        Assert.Equal((byte)80, machine.Memory.ReadPhysical(0xF4000u + 20u * 256u + 20u));
+        Assert.Equal((byte)86, machine.Memory.ReadPhysical(0xF4000u + 50u * 256u + 50u));
+        Assert.Equal((byte)86, machine.Memory.ReadPhysical(0xF4000u + 191u * 256u + 50u));
+        Assert.Equal((byte)0, machine.Memory.ReadPhysical(0xF4000u + 100u * 256u + 49u));
+        Assert.Equal((byte)0, machine.Memory.ReadPhysical(0xF4000u + 100u * 256u + 51u));
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
+    public void SelectedGraphicsModeSurvivesProgramCompletionAndReplWait()
+    {
+        Machine machine = StartInterpreter();
+        WritePackedProgram(machine.Memory,
+            "10 SCREEN 1\n20 LINE (50,50)-(50,250),3\n30 END");
+
+        machine.AdvanceCycles(2_000_000);
+        machine.AdvanceCycles(10_000);
+
+        Assert.Equal(VideoMode.Indexed4, machine.Video.WriteMode);
+        Assert.Equal(VideoMode.Indexed4, machine.Video.CurrentMode);
+        Assert.Equal((byte)0x0C, machine.Video.CurrentFrame.Vram.Span[50 * 128 + 12]);
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
     public void PsetAndPointSupportPackedAndRgbaVideoModes()
     {
         Machine packed = StartInterpreter();
@@ -319,11 +373,16 @@ public sealed class BasicInterpreterTests
     {
         foreach (char character in text)
         {
-            if (char.IsAsciiLetterUpper(character))
+            if (char.IsAsciiLetterUpper(character) || character is '(' or ')')
             {
                 machine.Keyboard.SetKeyState(0x2D, true); // LeftShift
                 machine.AdvanceCycles(128);
-                Press(machine, ScanCode(char.ToLowerInvariant(character)));
+                Press(machine, ScanCode(character switch
+                {
+                    '(' => '9',
+                    ')' => '0',
+                    _ => char.ToLowerInvariant(character),
+                }));
                 machine.Keyboard.SetKeyState(0x2D, false);
                 machine.AdvanceCycles(128);
             }
@@ -347,7 +406,8 @@ public sealed class BasicInterpreterTests
     {
         '0' => 0x0A, '1' => 0x01, '2' => 0x02, '3' => 0x03, '4' => 0x04,
         '5' => 0x05, '6' => 0x06, '7' => 0x07, '8' => 0x08, '9' => 0x09,
-        ' ' => 0x3B, '=' => 0x0C, 'a' => 0x21, 'd' => 0x23, 'e' => 0x13,
+        ' ' => 0x3B, ',' => 0x35, '-' => 0x0B, '=' => 0x0C,
+        'a' => 0x21, 'd' => 0x23, 'e' => 0x13,
         'g' => 0x25, 'i' => 0x18, 'l' => 0x29, 'n' => 0x33, 'o' => 0x19,
         's' => 0x22, 't' => 0x15, 'w' => 0x12,
         _ => throw new ArgumentOutOfRangeException(nameof(character), character, "No virtual scan-code mapping."),
