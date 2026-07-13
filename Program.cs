@@ -1,7 +1,55 @@
 ﻿using System.Diagnostics;
+using OldSimulator;
+using OldSimulator.Expansion;
 using OldSimulator.HostDevices;
 using OldSimulator.VirtualDevices;
 using Raylib_cs;
+
+SimulatorStartupOptions startup;
+try
+{
+    startup = SimulatorStartup.Parse(args);
+}
+catch (ArgumentException exception)
+{
+    Console.Error.WriteLine(exception.Message);
+    Environment.ExitCode = 2;
+    return;
+}
+
+if (startup.ShowHelp)
+{
+    Console.WriteLine(SimulatorStartup.Usage);
+    return;
+}
+
+IReadOnlyList<ExpansionCardInstallation> expansionCards = [];
+Machine machine;
+try
+{
+    expansionCards = SimulatorStartup.LoadExpansionCards(startup);
+    machine = new Machine(expansionCards: expansionCards);
+}
+catch (Exception exception)
+{
+    foreach (ExpansionCardInstallation installation in expansionCards)
+    {
+        try
+        {
+            installation.Card.Dispose();
+        }
+        catch
+        {
+            // Preserve the startup error.
+        }
+    }
+
+    Console.Error.WriteLine(exception.Message);
+    Environment.ExitCode = 1;
+    return;
+}
+
+using var machineScope = machine;
 
 const int min_window_width  = 1024;
 const int min_window_height = 768;
@@ -22,7 +70,6 @@ const ulong max_cycles_per_frame = cpu_hz / 240;
 long  previousTimestamp = Stopwatch.GetTimestamp();
 ulong cycleRemainder    = 0;
 
-var machine = new Machine();
 var debugger = new DebuggerConsole(machine);
 var keyboard = new RayLibKeyboard(machine.Keyboard);
 

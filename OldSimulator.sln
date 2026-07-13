@@ -12,6 +12,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Open16A-LD", "toolchains\Op
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Open16A-BASIC-PACK", "toolchains\Open16A-BASIC-PACK\Open16A-BASIC-PACK.csproj", "{6B3B0B7F-746E-4A6E-B0BD-78D8C8CE2D67}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OldSimulator.Expansion.Abstractions", "OldSimulator.Expansion.Abstractions\OldSimulator.Expansion.Abstractions.csproj", "{14D98B5C-2185-4C2F-99AF-C35C3DCEE4F5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OldSimulator.Expansion.Loopback", "OldSimulator.Expansion.Loopback\OldSimulator.Expansion.Loopback.csproj", "{A4CE064A-A81D-4D63-BE80-F807952B3C9B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,5 +46,13 @@ Global
 		{6B3B0B7F-746E-4A6E-B0BD-78D8C8CE2D67}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6B3B0B7F-746E-4A6E-B0BD-78D8C8CE2D67}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6B3B0B7F-746E-4A6E-B0BD-78D8C8CE2D67}.Release|Any CPU.Build.0 = Release|Any CPU
+		{14D98B5C-2185-4C2F-99AF-C35C3DCEE4F5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14D98B5C-2185-4C2F-99AF-C35C3DCEE4F5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14D98B5C-2185-4C2F-99AF-C35C3DCEE4F5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14D98B5C-2185-4C2F-99AF-C35C3DCEE4F5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A4CE064A-A81D-4D63-BE80-F807952B3C9B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A4CE064A-A81D-4D63-BE80-F807952B3C9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A4CE064A-A81D-4D63-BE80-F807952B3C9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A4CE064A-A81D-4D63-BE80-F807952B3C9B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

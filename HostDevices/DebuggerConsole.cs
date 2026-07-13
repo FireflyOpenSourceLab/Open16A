@@ -127,9 +127,10 @@ public sealed class DebuggerConsole : IDisposable
 
             string result = parts[0].ToLowerInvariant() switch
             {
-                "help" => "Commands: regs, status, pause, run, step [n], load <file> [base], loadrun <file> [base], in <port>, out <port> <word>, mem <addr> [len], poke <addr> <byte>, fill <addr> <len> <byte>, break <addr>, clear <addr>|all, breaks, set <reg> <value>, reset",
+                "help" => "Commands: regs, status, cards, pause, run, step [n], load <file> [base], loadrun <file> [base], in <port>, out <port> <word>, mem <addr> [len], poke <addr> <byte>, fill <addr> <len> <byte>, break <addr>, clear <addr>|all, breaks, set <reg> <value>, reset",
                 "regs" => FormatRegisters(),
                 "status" => FormatStatus(),
+                "cards" => FormatExpansionCards(),
                 "pause" => Pause(),
                 "run" or "continue" => Resume(),
                 "step" or "s" => Step(parts),
@@ -173,6 +174,20 @@ public sealed class DebuggerConsole : IDisposable
         Cpu cpu = machine.Cpu;
         string state = machine.Paused ? "paused" : cpu.Halted ? "halted" : "running";
         return $"{state} PC={cpu.PC:X4} PHYS={machine.CurrentPhysicalProgramCounter:X5} SP={cpu.SP:X4} SG={cpu.SG:X2} SR={cpu.SR:X4} IF={(cpu.InterruptsEnabled ? 1 : 0)} FAULT={cpu.FaultCode}";
+    }
+
+    private string FormatExpansionCards()
+    {
+        return string.Join(
+            Environment.NewLine,
+            machine.Expansion.Slots.Select(slot =>
+            {
+                if (slot.Descriptor is null)
+                    return $"{slot.Slot}: empty";
+
+                string error = string.IsNullOrEmpty(slot.LastError) ? string.Empty : $" error={slot.LastError}";
+                return $"{slot.Slot}: {slot.Descriptor.Id} {slot.Status}{error}";
+            }));
     }
 
     private string Pause()

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "slots": [
+    {
+      "slot": 0,
+      "assembly": "plugins/Open16A.Loopback.dll",
+      "cardId": "open16a.loopback",
+      "settings": {
+        "latencyCycles": 32
+      }
+    }
+  ]
+}

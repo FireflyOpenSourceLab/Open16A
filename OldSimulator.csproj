@@ -5,7 +5,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
@@ -14,12 +13,52 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="OldSimulator.Expansion.Abstractions\OldSimulator.Expansion.Abstractions.csproj"/>
+    <ProjectReference Include="OldSimulator.Expansion.Loopback\OldSimulator.Expansion.Loopback.csproj"
+                      ReferenceOutputAssembly="false"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="simulator.example.json"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="OldSimulator.Tests\**\*.cs"/>
     <EmbeddedResource Remove="OldSimulator.Tests\**\*"/>
     <None Remove="OldSimulator.Tests\**\*"/>
+    <Compile Remove="OldSimulator.Expansion.Abstractions\**\*.cs"/>
+    <EmbeddedResource Remove="OldSimulator.Expansion.Abstractions\**\*"/>
+    <None Remove="OldSimulator.Expansion.Abstractions\**\*"/>
+    <Compile Remove="OldSimulator.Expansion.Loopback\**\*.cs"/>
+    <EmbeddedResource Remove="OldSimulator.Expansion.Loopback\**\*"/>
+    <None Remove="OldSimulator.Expansion.Loopback\**\*"/>
     <Compile Remove="toolchains\**\*.cs"/>
     <EmbeddedResource Remove="toolchains\**\*"/>
     <None Remove="toolchains\**\*"/>
   </ItemGroup>
+
+  <Target Name="CopyExampleExpansionCardToOutput" AfterTargets="Build">
+    <ItemGroup>
+      <ExampleExpansionCardFiles Include="OldSimulator.Expansion.Loopback\bin\$(Configuration)\$(TargetFramework)\Open16A.Loopback.dll"/>
+      <ExampleExpansionCardFiles Include="OldSimulator.Expansion.Loopback\bin\$(Configuration)\$(TargetFramework)\Open16A.Loopback.deps.json"/>
+    </ItemGroup>
+    <MakeDir Directories="$(TargetDir)plugins"/>
+    <Copy SourceFiles="@(ExampleExpansionCardFiles)"
+          DestinationFolder="$(TargetDir)plugins"
+          SkipUnchangedFiles="true"/>
+  </Target>
+
+  <Target Name="CopyExampleExpansionCardToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <PublishedExampleExpansionCardFiles Include="OldSimulator.Expansion.Loopback\bin\$(Configuration)\$(TargetFramework)\Open16A.Loopback.dll"/>
+      <PublishedExampleExpansionCardFiles Include="OldSimulator.Expansion.Loopback\bin\$(Configuration)\$(TargetFramework)\Open16A.Loopback.deps.json"/>
+    </ItemGroup>
+    <MakeDir Directories="$(PublishDir)plugins"/>
+    <Copy SourceFiles="@(PublishedExampleExpansionCardFiles)"
+          DestinationFolder="$(PublishDir)plugins"
+          SkipUnchangedFiles="true"/>
+  </Target>
 
 </Project>

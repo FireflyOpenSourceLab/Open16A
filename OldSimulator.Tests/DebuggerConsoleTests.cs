@@ -1,4 +1,5 @@
 using OldSimulator.HostDevices;
+using OldSimulator.Expansion;
 using OldSimulator.VirtualDevices;
 using Xunit;
 
@@ -114,6 +115,23 @@ public sealed class DebuggerConsoleTests
     }
 
     [Fact]
+    public void CardsListsInstalledAndEmptyExpansionSlots()
+    {
+        var installation = new ExpansionCardInstallation(
+            2,
+            new ExpansionCardDescriptor("test.card", "Test card", 1),
+            new IdleExpansionCard());
+        using var machine = new Machine(expansionCards: [installation]);
+        var console = new DebuggerConsole(machine);
+
+        string result = console.Execute("cards");
+
+        Assert.Contains("0: empty", result);
+        Assert.Contains("2: test.card Present", result);
+        Assert.Contains("7: empty", result);
+    }
+
+    [Fact]
     public void LoadCopiesBinaryToPhysicalMemoryAndConfiguresAHighPageEntryPoint()
     {
         string path = Path.Combine(Path.GetTempPath(), $"open16a loader {Guid.NewGuid():N}.bin");
@@ -183,5 +201,24 @@ public sealed class DebuggerConsoleTests
     private static ushort Instruction(int opcode)
     {
         return (ushort)(opcode << 11);
+    }
+
+    private sealed class IdleExpansionCard : IExpansionCard
+    {
+        public void BeginCommand(ushort command, Memory<byte> mailbox, IExpansionCardCommand completion)
+        {
+        }
+
+        public void AdvanceCycles(ulong cycles)
+        {
+        }
+
+        public void Reset()
+        {
+        }
+
+        public void Dispose()
+        {
+        }
     }
 }

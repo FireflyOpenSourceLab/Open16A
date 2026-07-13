@@ -1,15 +1,21 @@
+using OldSimulator.Expansion;
+
 namespace OldSimulator.VirtualDevices;
 
-public sealed class Machine
+public sealed class Machine : IDisposable
 {
     public const uint VIDEO_RAM_ADDRESS      = 0xF4000;
     public const byte VIDEO_INTERRUPT_VECTOR = 0x10;
     public const byte KEYBOARD_INTERRUPT_VECTOR = 0x11;
+    public const byte EXPANSION_INTERRUPT_VECTOR = 0x12;
 
     private readonly HashSet<uint> breakpoints = [];
     private bool skipCurrentBreakpoint;
 
-    public Machine(byte[]? systemRom = null, ulong videoFrameCycles = VideoDevice.DEFAULT_FRAME_CYCLES)
+    public Machine(
+        byte[]? systemRom = null,
+        ulong videoFrameCycles = VideoDevice.DEFAULT_FRAME_CYCLES,
+        IEnumerable<ExpansionCardInstallation>? expansionCards = null)
     {
         Memory     = systemRom is null ? new Memory() : new Memory(systemRom);
         IoBus      = new IoBus();
@@ -27,6 +33,12 @@ public sealed class Machine
             Interrupts,
             KEYBOARD_INTERRUPT_VECTOR,
             Memory.CreatePhysicalView(KeyboardDevice.STATE_ADDRESS, KeyboardDevice.DEVICE_MEMORY_LENGTH));
+        Expansion = new ExpansionBus(
+            Memory,
+            IoBus,
+            Interrupts,
+            EXPANSION_INTERRUPT_VECTOR,
+            expansionCards);
 
         Video.Attach(IoBus, VideoDevice.PortPresent, VideoDevice.PortStatus);
         Character.Attach(IoBus);
@@ -39,6 +51,7 @@ public sealed class Machine
     public VideoDevice         Video      { get; }
     public CharacterDevice     Character  { get; }
     public KeyboardDevice      Keyboard   { get; }
+    public ExpansionBus        Expansion  { get; }
 
     public bool Paused { get; private set; }
 
@@ -102,8 +115,14 @@ public sealed class Machine
     {
         Cpu.Reset();
         Keyboard.Clear();
+        Expansion.Reset();
         Paused = false;
         skipCurrentBreakpoint = false;
+    }
+
+    public void Dispose()
+    {
+        Expansion.Dispose();
     }
 
     public ulong StepInstruction()
@@ -122,6 +141,7 @@ public sealed class Machine
     private void advanceDevices(ulong cycles)
     {
         Video.AdvanceCycles(cycles);
+        Expansion.AdvanceCycles(cycles);
     }
 
     private void acknowledgeInterrupt()
