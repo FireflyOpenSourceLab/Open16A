@@ -1,7 +1,6 @@
 using System.Text.Json;
 using OldSimulator.Expansion;
 using OldSimulator.Expansion.EmbeddedAsm;
-using Open16A.Asm;
 using Xunit;
 
 namespace OldSimulator.Tests;
@@ -9,16 +8,13 @@ namespace OldSimulator.Tests;
 public sealed class EmbeddedAsmExpansionCardTests
 {
     [Fact]
-    public void CompiledFirmwareReceivesTheCommandInterruptAndReturnsItsMailbox()
+    public void EmbeddedFirmwareReceivesTheCommandInterruptAndReturnsItsMailbox()
     {
-        AssemblyResult firmware = new Assembler().Assemble(FirmwareSource);
-        Assert.Equal((uint)EmbeddedAsmCardLayout.ProgramAddress, firmware.Origin);
-
         var plugin = new EmbeddedAsmExpansionCardPlugin();
         IExpansionCard card = plugin.Create(
             EmbeddedAsmExpansionCardPlugin.CardId,
             new ExpansionCardCreateContext(0),
-            JsonSerializer.SerializeToElement(new { firmwareBase64 = Convert.ToBase64String(firmware.Bytes) }));
+            JsonSerializer.SerializeToElement(new { }));
         using (card)
         {
             byte[] mailbox = new byte[ExpansionCardApi.MailboxSize];
@@ -36,45 +32,25 @@ public sealed class EmbeddedAsmExpansionCardTests
     }
 
     [Fact]
-    public void FirmwareMustBeCompiledBytecodeThatFitsBeforeTheMailbox()
+    public void FirmwareIsEmbeddedInThePluginAssembly()
+    {
+        string[] resources = typeof(EmbeddedAsmExpansionCardPlugin).Assembly.GetManifestResourceNames();
+
+        Assert.Contains("Open16A.EmbeddedAsm.firmware.bin", resources);
+    }
+
+    [Fact]
+    public void FirmwareConfigurationDoesNotAcceptRuntimeBase64Overrides()
     {
         var plugin = new EmbeddedAsmExpansionCardPlugin();
 
-        ArgumentException missing = Assert.Throws<ArgumentException>(() => plugin.Create(
+        ArgumentException error = Assert.Throws<ArgumentException>(() => plugin.Create(
             EmbeddedAsmExpansionCardPlugin.CardId,
             new ExpansionCardCreateContext(0),
-            JsonSerializer.SerializeToElement(new { })));
-        Assert.Contains("firmwareBase64", missing.Message, StringComparison.Ordinal);
+            JsonSerializer.SerializeToElement(new { firmwareBase64 = "AA==" })));
 
-        ArgumentException oversized = Assert.Throws<ArgumentException>(() => plugin.Create(
-            EmbeddedAsmExpansionCardPlugin.CardId,
-            new ExpansionCardCreateContext(0),
-            JsonSerializer.SerializeToElement(new
-            {
-                firmwareBase64 = Convert.ToBase64String(new byte[EmbeddedAsmCardLayout.MailboxAddress - EmbeddedAsmCardLayout.ProgramAddress + 1])
-            })));
-        Assert.Contains("firmware", oversized.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("rebuild", error.Message, StringComparison.OrdinalIgnoreCase);
     }
-
-    private const string FirmwareSource = """
-        .org 0300h
-        LI R1, handler
-        LI R2, 0010h
-        ST.W R1, [R2]
-        EI
-        LI R4, wait
-        wait:
-        HALT
-        JMP R4
-        handler:
-        LI R1, FC00h
-        ST.W R0, [R1 + 2]
-        LD.BU R2, [R1]
-        LI R3, 1
-        ADD R2, R2, R3
-        ST.B R2, [R1]
-        IRET
-        """;
 
     private sealed class CompletionProbe : IExpansionCardCommand
     {

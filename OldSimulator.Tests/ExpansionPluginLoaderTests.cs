@@ -63,7 +63,7 @@ public sealed class ExpansionPluginLoaderTests
                         slot = 1,
                         assembly = typeof(EmbeddedAsmExpansionCardPlugin).Assembly.Location,
                         cardId = EmbeddedAsmExpansionCardPlugin.CardId,
-                        settings = new { firmwareBase64 = Convert.ToBase64String([0]) }
+                        settings = new { }
                     }
                 }
             });

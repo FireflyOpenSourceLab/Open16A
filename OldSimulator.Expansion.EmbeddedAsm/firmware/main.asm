@@ -1,4 +1,3 @@
-.org 0300h
 LI R1, handler
 LI R2, 0010h
 ST.W R1, [R2]

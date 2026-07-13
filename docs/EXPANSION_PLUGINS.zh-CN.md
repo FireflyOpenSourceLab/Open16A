@@ -91,10 +91,10 @@ Guest ABI 不提供通用 `IDENTIFY` 或卡 ID 查询；操作系统和驱动必
 
 ## 7. 内嵌 ASM 协处理器卡
 
-`OldSimulator.Expansion.EmbeddedAsm` 提供 `open16a.embedded-asm` 卡。它执行已经编译为原始 `.bin` 字节流的 Open16A 固件，不会在运行时解析或汇编 ASM 源码。设置中的 `firmwareBase64` 是必填项，内容从物理 `0300h` 固定装入；字节流不包含 origin 头，且不得跨入 `FC00h` mailbox 区。
+`OldSimulator.Expansion.EmbeddedAsm` 提供 `open16a.embedded-asm` 卡。它执行构建期编译并嵌入 `Open16A.EmbeddedAsm.dll` 的原始 `.bin` 固件，不会在运行时解析或汇编 ASM 源码，也不接受 `firmwareBase64` 配置。固件从物理 `0300h` 固定装入，字节流不包含 origin 头，且不得跨入 `FC00h` mailbox 区。
 
 卡拥有独立、平坦的 64 KiB 地址空间：`0000h-FFFFh` 的逻辑地址就是物理地址，`SG` 不参与映射。布局为 `0010h-0011h` 的唯一外部命令中断向量（向量 `0`）、固件入口 `0300h`、初始向下增长栈 `BFFFh`、以及末尾 `FC00h-FFFFh` 的 1 KiB mailbox。
 
 外部槽命令到达时，卡先把其 mailbox 快照复制到内部 `FC00h`，把 16-bit 命令放进 `R0`，并抬起向量 `0`。固件应在启动时写入 `0010h`、执行 `EI`，通常进入 `HALT` 等待命令；中断处理程序读写 `R0` 和末尾 mailbox，执行 `IRET` 后回到 `HALT` 即完成本次外部命令，内部 mailbox 会完整写回主机卡 mailbox。
 
-仓库中的 `examples/command-echo.asm` 是可编译示例：它把输入命令写入 mailbox 字节 `2-3`，并将字节 `0` 加一。`embedded-asm.example.json` 包含该程序的 Base64 编译结果；将其作为 `simulator.json` 或通过 `--config` 指定即可加载。固件若未启用中断、未返回 `HALT` 或触发 CPU fault，外部命令不会正常完成，后者会使扩展卡进入 `PluginFault`。
+固件源位于 `OldSimulator.Expansion.EmbeddedAsm/firmware/main.asm`。构建会先以 `Open16A-ASM -c` 生成 `.o16o`，再以 `Open16A-LD --base 0300h` 生成 `firmware.bin` 并嵌入最终 DLL。可从仓库根目录运行 `powershell -ExecutionPolicy Bypass -File OldSimulator.Expansion.EmbeddedAsm/build.ps1`，或直接运行 `dotnet build OldSimulator.Expansion.EmbeddedAsm`；IDE 和 CI 构建走同一套 MSBuild Target。`embedded-asm.example.json` 的 `settings` 为空。固件若未启用中断、未返回 `HALT` 或触发 CPU fault，外部命令不会正常完成，后者会使扩展卡进入 `PluginFault`。

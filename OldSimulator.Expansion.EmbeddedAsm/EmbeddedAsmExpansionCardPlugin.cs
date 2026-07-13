@@ -15,6 +15,7 @@ public static class EmbeddedAsmCardLayout
 public sealed class EmbeddedAsmExpansionCardPlugin : IExpansionCardPlugin
 {
     public const string CardId = "open16a.embedded-asm";
+    private const string FirmwareResourceName = "Open16A.EmbeddedAsm.firmware.bin";
 
     private static readonly IReadOnlyList<ExpansionCardDescriptor> CardDescriptors =
         Array.AsReadOnly([
@@ -33,36 +34,32 @@ public sealed class EmbeddedAsmExpansionCardPlugin : IExpansionCardPlugin
         ArgumentNullException.ThrowIfNull(context);
         if (!string.Equals(cardId, CardId, StringComparison.Ordinal))
             throw new ArgumentException($"Unknown expansion card ID '{cardId}'.", nameof(cardId));
-
-        return new EmbeddedAsmExpansionCard(ReadFirmware(settings));
-    }
-
-    private static byte[] ReadFirmware(JsonElement settings)
-    {
-        if (settings.ValueKind != JsonValueKind.Object ||
-            !settings.TryGetProperty("firmwareBase64", out JsonElement firmwareElement) ||
-            firmwareElement.ValueKind != JsonValueKind.String)
+        if (settings.ValueKind != JsonValueKind.Object)
+            throw new ArgumentException("Embedded ASM card settings must be a JSON object.", nameof(settings));
+        if (settings.TryGetProperty("firmwareBase64", out _))
         {
             throw new ArgumentException(
-                "Embedded ASM card settings require a base64-encoded 'firmwareBase64' program.",
+                "firmwareBase64 is not supported; rebuild the plugin to change embedded firmware.",
                 nameof(settings));
         }
 
-        byte[] firmware;
-        try
-        {
-            firmware = Convert.FromBase64String(firmwareElement.GetString()!);
-        }
-        catch (FormatException exception)
-        {
-            throw new ArgumentException("Embedded ASM card firmwareBase64 is not valid base64.", nameof(settings), exception);
-        }
+        return new EmbeddedAsmExpansionCard(ReadEmbeddedFirmware());
+    }
+
+    private static byte[] ReadEmbeddedFirmware()
+    {
+        using Stream stream = typeof(EmbeddedAsmExpansionCardPlugin).Assembly
+            .GetManifestResourceStream(FirmwareResourceName) ??
+            throw new InvalidOperationException(
+                $"Embedded ASM firmware resource '{FirmwareResourceName}' is missing.");
+        using var output = new MemoryStream();
+        stream.CopyTo(output);
+        byte[] firmware = output.ToArray();
 
         if (firmware.Length == 0 || firmware.Length > EmbeddedAsmCardLayout.MailboxAddress - EmbeddedAsmCardLayout.ProgramAddress)
         {
-            throw new ArgumentException(
-                $"Embedded ASM firmware must contain 1-{EmbeddedAsmCardLayout.MailboxAddress - EmbeddedAsmCardLayout.ProgramAddress} bytes.",
-                nameof(settings));
+            throw new InvalidOperationException(
+                $"Embedded ASM firmware must contain 1-{EmbeddedAsmCardLayout.MailboxAddress - EmbeddedAsmCardLayout.ProgramAddress} bytes.");
         }
 
         return firmware;

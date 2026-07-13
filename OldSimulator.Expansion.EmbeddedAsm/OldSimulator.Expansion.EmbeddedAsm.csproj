@@ -2,6 +2,9 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>Open16A.EmbeddedAsm</AssemblyName>
+    <FirmwareSource>$(MSBuildProjectDirectory)\firmware\main.asm</FirmwareSource>
+    <FirmwareObject>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\firmware\main.o16o</FirmwareObject>
+    <FirmwareBinary>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\firmware.bin</FirmwareBinary>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -10,4 +13,19 @@
     <ProjectReference Include="..\OldSimulator.Expansion.Abstractions\OldSimulator.Expansion.Abstractions.csproj" />
     <ProjectReference Include="..\OldSimulator.csproj" AdditionalProperties="SkipEmbeddedAsmPackaging=true" />
   </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="$(FirmwareBinary)"
+                      LogicalName="Open16A.EmbeddedAsm.firmware.bin" />
+  </ItemGroup>
+
+  <Target Name="BuildEmbeddedFirmware" BeforeTargets="CoreCompile">
+    <MakeDir Directories="$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\firmware" />
+    <MSBuild Projects="$(MSBuildProjectDirectory)\..\toolchains\Open16A-ASM\Open16A-ASM.csproj;
+                       $(MSBuildProjectDirectory)\..\toolchains\Open16A-LD\Open16A-LD.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)" />
+    <Exec Command="dotnet &quot;$(MSBuildProjectDirectory)\..\toolchains\Open16A-ASM\bin\$(Configuration)\$(TargetFramework)\Open16A-ASM.dll&quot; &quot;$(FirmwareSource)&quot; -c -o &quot;$(FirmwareObject)&quot;" />
+    <Exec Command="dotnet &quot;$(MSBuildProjectDirectory)\..\toolchains\Open16A-LD\bin\$(Configuration)\$(TargetFramework)\Open16A-LD.dll&quot; &quot;$(FirmwareObject)&quot; --base 0300h -o &quot;$(FirmwareBinary)&quot; --map &quot;$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\firmware.map&quot;" />
+  </Target>
 </Project>
