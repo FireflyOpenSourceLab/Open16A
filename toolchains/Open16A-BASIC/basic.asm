@@ -4,6 +4,18 @@
 .org 1300h
 
 entry:
+    ; Runtime buffers live in the gap between string variables and arrays.
+    ; Only numeric variables require explicit reset; buffer lengths own data.
+    li r1, 7440h
+    li r2, 104
+    li r0, 0
+entry_clear_numeric_variables:
+    st.b r0, [r1]
+    li r3, 1
+    add r1, r1, r3
+    sub r2, r2, r3
+    li r3, 0
+    bne r2, r3, entry_clear_numeric_variables
     li r0, 0
     out 0037h, r0
     li r1, break_requested
@@ -80,7 +92,7 @@ submit_input:
     calla newline
     li r1, input_length
     ld.bu r2, [r1]
-    li r1, input_buffer
+    li r1, 7340h
     add r1, r1, r2
     li r0, 0
     st.b r0, [r1]
@@ -124,7 +136,7 @@ append_character:
     ld.bu r2, [r1]
     li r3, 007fh
     beq r2, r3, append_done
-    li r4, input_buffer
+    li r4, 7340h
     add r4, r4, r2
     st.b r0, [r4]
     li r3, 1
@@ -137,7 +149,7 @@ append_done:
 execute_direct:
     li r1, input_length
     ld.bu r2, [r1]
-    li r1, input_buffer
+    li r1, 7340h
     ld.bu r3, [r1]
     li r4, 0030h
     blo r3, r4, direct_command
@@ -151,90 +163,37 @@ execute_direct:
     st.b r0, [r1]
     jmpa input_loop
 direct_command:
-    li r3, 3
-    bne r2, r3, direct_cls
-    ld.bu r2, [r1]
-    li r3, 0072h
-    bne r2, r3, direct_cls
-    ld.bu r2, [r1 + 1]
-    li r3, 0075h
-    bne r2, r3, direct_error
-    ld.bu r2, [r1 + 2]
-    li r3, 006eh
-    bne r2, r3, direct_error
+    calla tokenize_interactive_line
+    li r3, 1
+    bne r0, r3, direct_error
+    li r1, 73c0h
+    ld.bu r0, [r1]
+    li r3, 00b0h
+    bne r0, r3, direct_cls
     calla run_program
     ret
 direct_cls:
-    li r2, input_length
-    ld.bu r2, [r2]
-    li r3, 3
-    bne r2, r3, direct_new
-    ld.bu r2, [r1]
-    li r3, 0063h
-    bne r2, r3, direct_new
-    ld.bu r2, [r1 + 1]
-    li r3, 006ch
-    bne r2, r3, direct_error
-    ld.bu r2, [r1 + 2]
-    li r3, 0073h
-    bne r2, r3, direct_error
+    li r3, 00a0h
+    bne r0, r3, direct_new
     li r0, 0
     out 0037h, r0
     out 0020h, r0
     ret
 direct_new:
-    li r2, input_length
-    ld.bu r2, [r2]
-    li r3, 3
-    bne r2, r3, direct_list
-    ld.bu r2, [r1]
-    li r3, 006eh
-    bne r2, r3, direct_list
-    ld.bu r2, [r1 + 1]
-    li r3, 0065h
-    bne r2, r3, direct_list
-    ld.bu r2, [r1 + 2]
-    li r3, 0077h
-    bne r2, r3, direct_list
+    li r3, 00b2h
+    bne r0, r3, direct_list
     li r3, 4000h
     li r0, 0
     st.b r0, [r3]
     ret
 direct_list:
-    li r2, input_length
-    ld.bu r2, [r2]
-    li r3, 4
-    bne r2, r3, direct_cont
-    ld.bu r2, [r1]
-    li r3, 006ch
-    bne r2, r3, direct_cont
-    ld.bu r2, [r1 + 1]
-    li r3, 0069h
-    bne r2, r3, direct_error
-    ld.bu r2, [r1 + 2]
-    li r3, 0073h
-    bne r2, r3, direct_error
-    ld.bu r2, [r1 + 3]
-    li r3, 0074h
-    bne r2, r3, direct_error
+    li r3, 00b1h
+    bne r0, r3, direct_cont
     calla list_program
     ret
 direct_cont:
-    li r2, input_length
-    ld.bu r2, [r2]
-    li r3, 4
-    bne r2, r3, direct_error
-    ld.bu r2, [r1]
-    li r3, 0063h
-    bne r2, r3, direct_error
-    ld.bu r2, [r1 + 1]
-    li r3, 006fh
-    bne r2, r3, direct_error
-    ld.bu r2, [r1 + 2]
-    li r3, 006eh
-    bne r2, r3, direct_error
-    ld.bu r2, [r1 + 3]
-    li r3, 0074h
+    li r3, 00b9h
+    bne r0, r3, direct_error
     bne r2, r3, direct_error
     li r3, continuation_valid
     ld.bu r5, [r3]
@@ -392,7 +351,7 @@ list_done:
 ; In-guest program editor. It parses a decimal line number, tokenizes the
 ; remaining Microsoft-style BASIC statement, and updates the B16P store.
 enter_program_line:
-    li r1, input_buffer
+    li r1, 7340h
     li r0, 0
 parse_line_number:
     ld.bu r3, [r1]
@@ -426,7 +385,7 @@ parse_statement:
     li r3, 0
     beq r0, r3, direct_error
     mov r1, r0
-    li r0, token_buffer
+    li r0, 73c0h
     ; append_raw_record expects R0=length and R1=source.
     mov r3, r1
     mov r1, r0
@@ -440,7 +399,7 @@ tokenize_interactive_line:
     li r2, token_cursor
     st.w r1, [r2]
     li r2, token_out
-    li r3, token_buffer
+    li r3, 73c0h
     st.w r3, [r2]
     li r2, token_count
     li r3, 0
@@ -703,7 +662,7 @@ tokenize_error:
     li r0, 0
     ret
 
-; R0=ASCII byte. Emits it to token_buffer, returning normally or setting a
+; R0=ASCII byte. Emits it to the token buffer at 73C0h, returning normally or setting a
 ; zero token count on capacity overflow.
 token_emit:
     li r1, token_count
@@ -981,69 +940,22 @@ run_token_dispatch:
     ld.bu r0, [r1]
     li r3, 1
     add r1, r1, r3
-    li r3, 0091h
-    beq r0, r3, run_print
-    li r3, 0092h
-    beq r0, r3, run_input
-    li r3, 0090h
-    beq r0, r3, run_let
-    li r3, 0084h
-    beq r0, r3, run_implicit_let
-    li r3, 0093h
-    beq r0, r3, run_if
-    li r3, 0095h
-    beq r0, r3, run_goto
-    li r3, 0096h
-    beq r0, r3, run_gosub
-    li r3, 0097h
-    beq r0, r3, run_return
-    li r3, 0098h
-    beq r0, r3, run_for
-    li r3, 009bh
-    beq r0, r3, run_next
-    li r3, 00b6h
-    beq r0, r3, run_data
-    li r3, 00b7h
-    beq r0, r3, run_read
-    li r3, 00b8h
-    beq r0, r3, run_restore
-    li r3, 00b4h
-    beq r0, r3, run_poke
-    li r3, 00a0h
-    beq r0, r3, run_cls
-    li r3, 00a1h
-    beq r0, r3, run_color
-    li r3, 00a2h
-    beq r0, r3, run_locate
-    li r3, 009fh
-    beq r0, r3, run_dim
-    li r3, 009ch
-    beq r0, r3, run_rem
-    li r3, 009dh
-    beq r0, r3, run_done
-    li r3, 009eh
-    beq r0, r3, run_stop
-    li r3, 00bah
-    beq r0, r3, run_screen
-    li r3, 00bbh
-    beq r0, r3, run_pset
-    li r3, 00bch
-    beq r0, r3, run_preset
-    li r3, 00bdh
-    beq r0, r3, run_line_graphics
-    li r3, 00beh
-    beq r0, r3, run_circle
-    li r3, 00bfh
-    beq r0, r3, run_palette
-    li r3, 00c0h
-    beq r0, r3, run_present
-    li r3, 00c1h
-    beq r0, r3, run_out
     li r3, 003ah
     beq r0, r3, run_token
-    li r1, syntax_text
-    calla puts
-    ret
+    li r3, 0084h
+    beq r0, r3, run_implicit_let
+    li r3, 0090h
+    blo r0, r3, run_syntax
+    li r5, 00c2h
+    bhs r0, r5, run_syntax
+    sub r0, r0, r3
+    add r0, r0, r0
+    li r3, statement_dispatch_table
+    add r3, r3, r0
+    ld.w r3, [r3]
+    li r5, 0
+    beq r3, r5, run_syntax
+    jmp r3
 run_print:
     beq r1, r4, print_newline
     ld.bu r0, [r1]
@@ -1119,7 +1031,7 @@ run_input_expect_variable:
     jmpa input_loop
 
 parse_runtime_input:
-    li r1, input_buffer
+    li r1, 7340h
     li r0, 0
     li r5, 0
     ld.bu r3, [r1]
@@ -1159,7 +1071,7 @@ parse_runtime_store:
     ret
 parse_runtime_store_string:
     calla basic_string_address
-    li r1, input_buffer
+    li r1, 7340h
     li r5, 0
 parse_runtime_string_count:
     ld.bu r3, [r1]
@@ -1175,7 +1087,7 @@ parse_runtime_string_ready:
     st.b r5, [r6]
     li r7, 1
     add r6, r6, r7
-    li r1, input_buffer
+    li r1, 7340h
 parse_runtime_string_copy:
     li r7, 0
     beq r5, r7, parse_runtime_string_done
@@ -1365,10 +1277,10 @@ print_integer_variable:
     li r6, 0040h
     and r3, r3, r6
     beq r3, r6, print_integer_variable_integer
-    li r6, numeric_vars
+    li r6, 7474h
     jmpa print_integer_variable_load
 print_integer_variable_integer:
-    li r6, integer_vars
+    li r6, 7440h
 print_integer_variable_load:
     add r6, r6, r5
     ld.w r0, [r6]
@@ -1457,10 +1369,10 @@ run_let_equals:
     and r3, r3, r7
     li r6, 0040h
     beq r3, r6, run_let_integer
-    li r6, numeric_vars
+    li r6, 7474h
     jmpa run_let_store
 run_let_integer:
-    li r6, integer_vars
+    li r6, 7440h
 run_let_store:
     add r6, r6, r5
     st.w r0, [r6]
@@ -1528,7 +1440,7 @@ run_gosub:
     li r6, 8
     bhs r5, r6, run_gosub_overflow
     add r6, r5, r5
-    li r7, gosub_stack
+    li r7, 74a8h
     add r7, r7, r6
     st.w r4, [r7]
     li r6, 1
@@ -1549,7 +1461,7 @@ run_return:
     sub r5, r5, r6
     st.b r5, [r3]
     add r6, r5, r5
-    li r7, gosub_stack
+    li r7, 74a8h
     add r7, r7, r6
     ld.w r1, [r7]
     jmpa run_line
@@ -1598,23 +1510,23 @@ run_for_push:
     ld.bu r7, [r3]
     li r5, 8
     bhs r7, r5, run_syntax
-    li r5, for_variables
+    li r5, 74b8h
     add r5, r5, r7
     li r6, for_new_variable
     ld.bu r6, [r6]
     st.b r6, [r5]
     add r6, r7, r7
-    li r5, for_limits
+    li r5, 74c0h
     add r5, r5, r6
     li r0, for_new_limit
     ld.w r0, [r0]
     st.w r0, [r5]
-    li r5, for_steps
+    li r5, 74d0h
     add r5, r5, r6
     li r0, for_new_step
     ld.w r0, [r0]
     st.w r0, [r5]
-    li r5, for_resume
+    li r5, 74e0h
     add r5, r5, r6
     st.w r4, [r5]
     li r5, 1
@@ -1629,7 +1541,7 @@ run_next:
     beq r7, r5, run_syntax
     li r5, 1
     sub r7, r7, r5
-    li r5, for_variables
+    li r5, 74b8h
     add r5, r5, r7
     ld.bu r5, [r5]
     ld.bu r6, [r1]
@@ -1645,7 +1557,7 @@ run_next_increment:
     st.b r5, [r3]
     calla basic_load_variable
     add r6, r7, r7
-    li r3, for_steps
+    li r3, 74d0h
     add r3, r3, r6
     ld.w r3, [r3]
     add r0, r0, r3
@@ -1653,10 +1565,10 @@ run_next_increment:
     ld.bu r5, [r5]
     calla basic_store_variable
     add r6, r7, r7
-    li r3, for_limits
+    li r3, 74c0h
     add r3, r3, r6
     ld.w r5, [r3]
-    li r3, for_steps
+    li r3, 74d0h
     add r3, r3, r6
     ld.w r3, [r3]
     li r6, 0
@@ -1667,7 +1579,7 @@ run_next_negative:
     blt r0, r5, run_next_done
 run_next_continue:
     add r6, r7, r7
-    li r3, for_resume
+    li r3, 74e0h
     add r3, r3, r6
     ld.w r1, [r3]
     jmpa run_line
@@ -1690,10 +1602,10 @@ basic_load_variable:
     li r6, 0040h
     and r5, r5, r6
     beq r5, r6, basic_load_integer
-    li r6, numeric_vars
+    li r6, 7474h
     jmpa basic_load_value
 basic_load_integer:
-    li r6, integer_vars
+    li r6, 7440h
 basic_load_value:
     add r6, r6, r3
     ld.w r0, [r6]
@@ -1713,10 +1625,10 @@ basic_variable_address:
     li r6, 0040h
     and r5, r5, r6
     beq r5, r6, basic_variable_integer
-    li r6, numeric_vars
+    li r6, 7474h
     jmpa basic_variable_address_done
 basic_variable_integer:
-    li r6, integer_vars
+    li r6, 7440h
 basic_variable_address_done:
     add r6, r6, r3
     ret
@@ -2025,10 +1937,10 @@ read_integer_variable:
     li r6, 0040h
     and r3, r3, r6
     beq r3, r6, read_integer_variable_integer
-    li r6, numeric_vars
+    li r6, 7474h
     jmpa read_integer_variable_load
 read_integer_variable_integer:
-    li r6, integer_vars
+    li r6, 7440h
 read_integer_variable_load:
     add r6, r6, r5
     ld.w r0, [r6]
@@ -2224,9 +2136,6 @@ read_function_argument:
     add r1, r1, r3
     ret
 read_integer_invalid:
-    li r3, expression_error
-    li r5, 1
-    st.b r5, [r3]
     li r0, 0
     ret
 
@@ -2653,32 +2562,79 @@ graphics_map_offset:
     or r6, r6, r7
     ret
 
+; Resolves graphics_x/graphics_y in the selected mode. R0=1 and R6 is the
+; mapped logical byte address on success; R0=0 clips an invalid coordinate.
+graphics_locate_pixel:
+    li r3, graphics_mode
+    ld.bu r3, [r3]
+    li r5, 0
+    beq r3, r5, graphics_locate_mode0
+    li r5, 1
+    beq r3, r5, graphics_locate_mode1
+    li r3, graphics_x
+    ld.w r5, [r3]
+    li r6, 128
+    bhs r5, r6, graphics_locate_invalid
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r6, 96
+    bhs r0, r6, graphics_locate_invalid
+    li r6, 9
+    shl r0, r0, r6
+    li r6, 2
+    shl r5, r5, r6
+    add r0, r0, r5
+    jmpa graphics_locate_map
+graphics_locate_mode0:
+    li r3, graphics_x
+    ld.w r5, [r3]
+    li r6, 256
+    bhs r5, r6, graphics_locate_invalid
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r6, 192
+    bhs r0, r6, graphics_locate_invalid
+    li r6, 8
+    shl r0, r0, r6
+    add r0, r0, r5
+    jmpa graphics_locate_map
+graphics_locate_mode1:
+    li r3, graphics_x
+    ld.w r5, [r3]
+    li r6, 512
+    bhs r5, r6, graphics_locate_invalid
+    li r3, graphics_y
+    ld.w r0, [r3]
+    li r6, 384
+    bhs r0, r6, graphics_locate_invalid
+    li r6, 7
+    shl r0, r0, r6
+    li r6, 2
+    shr r7, r5, r6
+    add r0, r0, r7
+graphics_locate_map:
+    calla graphics_map_offset
+    li r0, 1
+    ret
+graphics_locate_invalid:
+    li r0, 0
+    ret
+
 graphics_set_pixel:
     push r1
     push r2
     push r4
     rdsg r7
     push r7
+    calla graphics_locate_pixel
+    li r3, 0
+    beq r0, r3, graphics_set_done
     li r3, graphics_mode
     ld.bu r3, [r3]
     li r5, 0
     beq r3, r5, graphics_set_mode0
     li r5, 1
     beq r3, r5, graphics_set_mode1
-    li r3, graphics_x
-    ld.w r5, [r3]
-    li r6, 128
-    bhs r5, r6, graphics_set_done
-    li r3, graphics_y
-    ld.w r0, [r3]
-    li r6, 96
-    bhs r0, r6, graphics_set_done
-    li r6, 9
-    shl r0, r0, r6
-    li r6, 2
-    shl r5, r5, r6
-    add r0, r0, r5
-    calla graphics_map_offset
     li r3, graphics_color
     ld.w r5, [r3]
     li r7, 12
@@ -2707,37 +2663,11 @@ graphics_set_pixel:
     st.b r0, [r6 + 3]
     jmpa graphics_set_done
 graphics_set_mode0:
-    li r3, graphics_x
-    ld.w r5, [r3]
-    li r6, 256
-    bhs r5, r6, graphics_set_done
-    li r3, graphics_y
-    ld.w r0, [r3]
-    li r6, 192
-    bhs r0, r6, graphics_set_done
-    li r6, 8
-    shl r0, r0, r6
-    add r0, r0, r5
-    calla graphics_map_offset
     li r3, graphics_color
     ld.w r5, [r3]
     st.b r5, [r6]
     jmpa graphics_set_done
 graphics_set_mode1:
-    li r3, graphics_x
-    ld.w r5, [r3]
-    li r6, 512
-    bhs r5, r6, graphics_set_done
-    li r3, graphics_y
-    ld.w r0, [r3]
-    li r6, 384
-    bhs r0, r6, graphics_set_done
-    li r6, 7
-    shl r0, r0, r6
-    li r6, 2
-    shr r7, r5, r6
-    add r0, r0, r7
-    calla graphics_map_offset
     ld.bu r0, [r6]
     li r3, graphics_x
     ld.w r5, [r3]
@@ -2772,26 +2702,15 @@ graphics_get_pixel:
     push r4
     rdsg r7
     push r7
+    calla graphics_locate_pixel
+    li r3, 0
+    beq r0, r3, graphics_get_zero
     li r3, graphics_mode
     ld.bu r3, [r3]
     li r5, 0
     beq r3, r5, graphics_get_mode0
     li r5, 1
     beq r3, r5, graphics_get_mode1
-    li r3, graphics_x
-    ld.w r5, [r3]
-    li r6, 128
-    bhs r5, r6, graphics_get_zero
-    li r3, graphics_y
-    ld.w r0, [r3]
-    li r6, 96
-    bhs r0, r6, graphics_get_zero
-    li r6, 9
-    shl r0, r0, r6
-    li r6, 2
-    shl r5, r5, r6
-    add r0, r0, r5
-    calla graphics_map_offset
     ld.bu r5, [r6]
     li r7, 00f0h
     and r5, r5, r7
@@ -2813,35 +2732,9 @@ graphics_get_pixel:
     or r0, r5, r0
     jmpa graphics_get_done
 graphics_get_mode0:
-    li r3, graphics_x
-    ld.w r5, [r3]
-    li r6, 256
-    bhs r5, r6, graphics_get_zero
-    li r3, graphics_y
-    ld.w r0, [r3]
-    li r6, 192
-    bhs r0, r6, graphics_get_zero
-    li r6, 8
-    shl r0, r0, r6
-    add r0, r0, r5
-    calla graphics_map_offset
     ld.bu r0, [r6]
     jmpa graphics_get_done
 graphics_get_mode1:
-    li r3, graphics_x
-    ld.w r5, [r3]
-    li r6, 512
-    bhs r5, r6, graphics_get_zero
-    li r3, graphics_y
-    ld.w r0, [r3]
-    li r6, 384
-    bhs r0, r6, graphics_get_zero
-    li r6, 7
-    shl r0, r0, r6
-    li r6, 2
-    shr r7, r5, r6
-    add r0, r0, r7
-    calla graphics_map_offset
     ld.bu r0, [r6]
     li r3, graphics_x
     ld.w r5, [r3]
@@ -3108,15 +3001,6 @@ input_length:
     .byte 0
 stored_line_number:
     .word 0
-input_buffer:
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 token_cursor:
     .word 0
 token_out:
@@ -3132,8 +3016,6 @@ token_word_length:
 token_variable_type:
     .byte 0
 token_variable_value:
-    .byte 0
-expression_error:
     .byte 0
 assignment_variable:
     .byte 0
@@ -3157,8 +3039,6 @@ if_second_operator:
     .byte 0
 gosub_depth:
     .byte 0
-gosub_stack:
-    .word 0,0,0,0,0,0,0,0
 for_depth:
     .byte 0
 for_new_variable:
@@ -3169,14 +3049,6 @@ for_new_limit:
     .word 0
 for_new_step:
     .word 1
-for_variables:
-    .byte 0,0,0,0,0,0,0,0
-for_limits:
-    .word 0,0,0,0,0,0,0,0
-for_steps:
-    .word 0,0,0,0,0,0,0,0
-for_resume:
-    .word 0,0,0,0,0,0,0,0
 input_mode:
     .byte 0
 input_target_variable:
@@ -3245,15 +3117,21 @@ circle_plot_dx:
     .word 0
 circle_plot_dy:
     .word 0
-token_buffer:
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+statement_dispatch_table:
+    ; 90h-97h
+    .word run_let,run_print,run_input,run_if,0,run_goto,run_gosub,run_return
+    ; 98h-9Fh
+    .word run_for,0,0,run_next,run_rem,run_done,run_stop,run_dim
+    ; A0h-A7h
+    .word run_cls,run_color,run_locate,0,0,0,0,0
+    ; A8h-AFh
+    .word 0,0,0,0,0,0,0,0
+    ; B0h-B7h
+    .word 0,0,0,0,run_poke,0,run_data,run_read
+    ; B8h-BFh
+    .word run_restore,0,run_screen,run_pset,run_preset,run_line_graphics,run_circle,run_palette
+    ; C0h-C1h
+    .word run_present,run_out
 token_keyword_table:
     .byte 090h,3,'l','e','t', 091h,5,'p','r','i','n','t'
     .byte 092h,5,'i','n','p','u','t', 093h,2,'i','f'
@@ -3275,13 +3153,6 @@ token_keyword_table:
     .byte 0beh,6,'c','i','r','c','l','e', 0bfh,7,'p','a','l','e','t','t','e'
     .byte 0c0h,7,'p','r','e','s','e','n','t', 0c1h,3,'o','u','t'
     .byte 0c2h,3,'i','n','p', 0c3h,5,'p','o','i','n','t', 0
-integer_vars:
-    .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .word 0,0,0,0,0,0,0,0,0,0
-numeric_vars:
-    .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    .word 0,0,0,0,0,0,0,0,0,0
-
 ; scan 00h-3Eh, unshifted then shifted. Zero denotes a non-text key.
 key_lower:
     .byte '`','1','2','3','4','5','6','7','8','9','0','-','=',0,0,0

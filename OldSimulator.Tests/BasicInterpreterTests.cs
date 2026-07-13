@@ -8,6 +8,17 @@ namespace OldSimulator.Tests;
 public sealed class BasicInterpreterTests
 {
     [Fact]
+    public void InterpreterStaysWithinBasic11SizeBudget()
+    {
+        AssemblyResult image = AssembleInterpreter();
+
+        Assert.True(image.Bytes.Length <= 10_000,
+            $"BASIC 1.1 interpreter is {image.Bytes.Length} bytes; budget is 10000 bytes.");
+        Assert.True(image.Origin + image.Bytes.Length <= 0x4000,
+            "Interpreter must not overlap the B16P program store at 4000h.");
+    }
+
+    [Fact]
     public void AssembledInterpreterRunsAnAutoRunB16PProgramAndWaitsForKeyboard()
     {
         Machine machine = StartInterpreter();
@@ -95,14 +106,29 @@ public sealed class BasicInterpreterTests
     }
 
     [Fact]
+    public void DirectCommandsUseTheCaseInsensitiveTokenizer()
+    {
+        Machine machine = StartInterpreter();
+        machine.AdvanceCycles(100_000);
+        SendLine(machine, "10 end");
+
+        SendLine(machine, "NEW");
+        machine.AdvanceCycles(10_000);
+
+        Assert.Equal((byte)0, machine.Memory.ReadPhysical(0x4000));
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
     public void ExecutesIntegerExpressionsWithMicrosoftBasicPrecedence()
     {
         Machine machine = StartInterpreter();
-        WritePackedProgram(machine.Memory, "10 LET A=2+3*4\n20 POKE 8000,A\n30 END");
+        WritePackedProgram(machine.Memory, "10 LET A=2+3*4\n20 POKE 16000,A\n30 END");
 
         machine.AdvanceCycles(100_000);
 
-        Assert.Equal((byte)14, machine.Memory.ReadPhysical(8000));
+        Assert.Equal((byte)14, machine.Memory.ReadPhysical(16000));
         Assert.True(machine.Cpu.Halted);
         Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
     }
@@ -271,9 +297,7 @@ public sealed class BasicInterpreterTests
 
     private static Machine StartInterpreter()
     {
-        string root = FindProjectRoot();
-        string source = File.ReadAllText(Path.Combine(root, "toolchains", "Open16A-BASIC", "basic.asm"));
-        AssemblyResult image = new Assembler().Assemble(source);
+        AssemblyResult image = AssembleInterpreter();
         var machine = new Machine();
 
         for (var index = 0; index < image.Bytes.Length; index++)
@@ -284,10 +308,30 @@ public sealed class BasicInterpreterTests
         return machine;
     }
 
+    private static AssemblyResult AssembleInterpreter()
+    {
+        string root = FindProjectRoot();
+        string source = File.ReadAllText(Path.Combine(root, "toolchains", "Open16A-BASIC", "basic.asm"));
+        return new Assembler().Assemble(source);
+    }
+
     private static void SendLine(Machine machine, string text)
     {
         foreach (char character in text)
-            Press(machine, ScanCode(character));
+        {
+            if (char.IsAsciiLetterUpper(character))
+            {
+                machine.Keyboard.SetKeyState(0x2D, true); // LeftShift
+                machine.AdvanceCycles(128);
+                Press(machine, ScanCode(char.ToLowerInvariant(character)));
+                machine.Keyboard.SetKeyState(0x2D, false);
+                machine.AdvanceCycles(128);
+            }
+            else
+            {
+                Press(machine, ScanCode(character));
+            }
+        }
         Press(machine, 0x2C); // Enter
     }
 
@@ -305,7 +349,7 @@ public sealed class BasicInterpreterTests
         '5' => 0x05, '6' => 0x06, '7' => 0x07, '8' => 0x08, '9' => 0x09,
         ' ' => 0x3B, '=' => 0x0C, 'a' => 0x21, 'd' => 0x23, 'e' => 0x13,
         'g' => 0x25, 'i' => 0x18, 'l' => 0x29, 'n' => 0x33, 'o' => 0x19,
-        's' => 0x22, 't' => 0x15,
+        's' => 0x22, 't' => 0x15, 'w' => 0x12,
         _ => throw new ArgumentOutOfRangeException(nameof(character), character, "No virtual scan-code mapping."),
     };
 

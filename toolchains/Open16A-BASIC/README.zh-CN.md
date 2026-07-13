@@ -15,6 +15,10 @@ Open16A BASIC 1.1 是 Microsoft BASIC 风格的 16-bit 整数子集。默认数�
 整数暂存器使用；BASIC 1.1 的图形执行器仍按视频设备的 `SG` 分页 ABI 访问
 `F4000h-FFFFFh`，不会把物理地址截成 16 bit。
 
+解释器把可变工作区放在字符串区和数组区之间：输入缓冲为 `7340h-73BFh`，
+token 缓冲为 `73C0h-743Fh`，数值变量为 `7440h-74A7h`，GOSUB/FOR 栈为
+`74A8h-74EFh`。这些地址属于 BASIC 1.1 运行时保留区。
+
 REPL 与 PACK 使用同一套大小写不敏感 tokenizer。输入带行号的任意支持语句会按
 行号插入或替换；只输入行号会删除该行。编辑后立即接受下一行，不重复输出
 `READY.`。直接命令为 `RUN`、`LIST`、`NEW`、`CONT` 和 `CLS`；`LIST` 从 token
