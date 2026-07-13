@@ -97,6 +97,26 @@ public sealed class BasicInterpreterTests
         const string statement = "line (0,0)-(20,20),80";
 
         SendLine(machine, $"10 {statement}");
+        machine.AdvanceCycles(10_000);
+
+        byte[] expected = BasicTokenizer.Tokenize(statement);
+        Assert.Equal((ushort)expected.Length, machine.Memory.ReadPhysicalWord(0x400C));
+        Assert.Equal(expected,
+            Enumerable.Range(0, expected.Length)
+                .Select(index => machine.Memory.ReadPhysical(0x400Eu + (uint)index)).ToArray());
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+    }
+
+    [Fact]
+    public void ReplPreservesStringLiteralBytesInTheSharedTokenFormat()
+    {
+        Machine machine = StartInterpreter();
+        machine.AdvanceCycles(100_000);
+        const string statement = "print \"HELLO\"";
+
+        SendLine(machine, $"10 {statement}");
+        machine.AdvanceCycles(10_000);
 
         byte[] expected = BasicTokenizer.Tokenize(statement);
         Assert.Equal((ushort)expected.Length, machine.Memory.ReadPhysicalWord(0x400C));
@@ -373,7 +393,7 @@ public sealed class BasicInterpreterTests
     {
         foreach (char character in text)
         {
-            if (char.IsAsciiLetterUpper(character) || character is '(' or ')')
+            if (char.IsAsciiLetterUpper(character) || character is '(' or ')' or '"')
             {
                 machine.Keyboard.SetKeyState(0x2D, true); // LeftShift
                 machine.AdvanceCycles(128);
@@ -381,6 +401,7 @@ public sealed class BasicInterpreterTests
                 {
                     '(' => '9',
                     ')' => '0',
+                    '"' => '\'',
                     _ => char.ToLowerInvariant(character),
                 }));
                 machine.Keyboard.SetKeyState(0x2D, false);
@@ -406,10 +427,10 @@ public sealed class BasicInterpreterTests
     {
         '0' => 0x0A, '1' => 0x01, '2' => 0x02, '3' => 0x03, '4' => 0x04,
         '5' => 0x05, '6' => 0x06, '7' => 0x07, '8' => 0x08, '9' => 0x09,
-        ' ' => 0x3B, ',' => 0x35, '-' => 0x0B, '=' => 0x0C,
-        'a' => 0x21, 'd' => 0x23, 'e' => 0x13,
-        'g' => 0x25, 'i' => 0x18, 'l' => 0x29, 'n' => 0x33, 'o' => 0x19,
-        's' => 0x22, 't' => 0x15, 'w' => 0x12,
+        ' ' => 0x3B, '\'' => 0x2B, ',' => 0x35, '-' => 0x0B, '=' => 0x0C,
+        'a' => 0x21, 'd' => 0x23, 'e' => 0x13, 'g' => 0x25, 'h' => 0x26,
+        'i' => 0x18, 'l' => 0x29, 'n' => 0x33, 'o' => 0x19, 'p' => 0x1A,
+        'r' => 0x14, 's' => 0x22, 't' => 0x15, 'w' => 0x12,
         _ => throw new ArgumentOutOfRangeException(nameof(character), character, "No virtual scan-code mapping."),
     };
 

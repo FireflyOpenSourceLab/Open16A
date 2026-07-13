@@ -663,6 +663,7 @@ tokenize_error:
 ; R0=ASCII byte. Emits it to the token buffer at 73C0h, returning normally or setting a
 ; zero token count on capacity overflow.
 token_emit:
+    push r4
     li r1, token_count
     ld.w r2, [r1]
     li r3, 007fh
@@ -678,11 +679,13 @@ token_emit:
     add r2, r2, r4
     li r1, token_count
     st.w r2, [r1]
+    pop r4
     ret
 token_emit_overflow:
     li r1, token_count
     li r2, 0
     st.w r2, [r1]
+    pop r4
     ret
 
 ; R0=ASCII char, converts A-Z to a-z.
