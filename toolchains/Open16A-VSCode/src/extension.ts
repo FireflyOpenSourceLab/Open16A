@@ -91,10 +91,19 @@ class StackNavigationProvider implements vscode.CodeLensProvider, vscode.Disposa
             this.changed.fire();
         }
     });
+    private readonly configurationSubscription = vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration("open16a.stackNavigation.enabled")) {
+            this.changed.fire();
+        }
+    });
 
     public readonly onDidChangeCodeLenses = this.changed.event;
 
     public provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+        if (!stackNavigationEnabled()) {
+            return [];
+        }
+
         const { pairs, stack, unmatchedPops } = analyzeStack(document);
 
         const lenses: vscode.CodeLens[] = [];
@@ -114,8 +123,13 @@ class StackNavigationProvider implements vscode.CodeLensProvider, vscode.Disposa
 
     public dispose(): void {
         this.changeSubscription.dispose();
+        this.configurationSubscription.dispose();
         this.changed.dispose();
     }
+}
+
+function stackNavigationEnabled(): boolean {
+    return vscode.workspace.getConfiguration("open16a.stackNavigation").get<boolean>("enabled", false);
 }
 
 function analyzeStack(document: vscode.TextDocument): {

@@ -1,6 +1,6 @@
 # Open16A VS Code 扩展
 
-该扩展为 `.o16a` 和 `.asm` 提供 Open16A 语法高亮，并通过 `Open16A-LSP` 提供诊断、指令/寄存器/标签补全、悬停、标签定义跳转和文档符号。补全无论以 Enter 或 Tab 提交，都会替换光标所在的完整标识符。它还会在 `PUSH Rn`/`POP Rn` 上显示可点击的栈配对箭头；配对严格遵循 LIFO，未配对的保存或恢复会显示警告。
+该扩展为 `.o16a` 和 `.asm` 提供 Open16A 语法高亮，并通过 `Open16A-LSP` 提供诊断、指令/寄存器/标签补全、悬停、标签定义跳转和文档符号。补全无论以 Enter 或 Tab 提交，都会替换光标所在的完整标识符。实验性 `PUSH Rn`/`POP Rn` 栈配对导航默认关闭；启用后会显示可点击箭头，并以严格 LIFO 规则标记未配对的保存或恢复。
 
 ## 开发与安装
 
@@ -24,4 +24,4 @@ npm run package
 
 内置服务器直接启动。使用外部 DLL 时，`open16a.languageServer.dotnetPath` 可改为 `dotnet` 的绝对路径。
 
-命令面板中的 `Open16A: Restart Language Server` 可在更新 LSP 后重启连接。点击栈配对箭头可跳至对应的 `PUSH` 或 `POP`。
+命令面板中的 `Open16A: Restart Language Server` 可在更新 LSP 后重启连接。需要试用栈配对时，设置 `open16a.stackNavigation.enabled` 为 `true`；点击栈配对箭头可跳至对应的 `PUSH` 或 `POP`。该功能进行控制流分析，较大的文件可能影响扩展宿主响应，因此默认保持关闭。

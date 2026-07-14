@@ -55,6 +55,11 @@
           "type": "string",
           "default": "dotnet",
           "description": "Command or absolute path used to run Open16A-LSP.dll."
+        },
+        "open16a.stackNavigation.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Experimental control-flow-aware PUSH/POP navigation. Disabled by default because large assembly files can make the extension host unresponsive."
         }
       }
     }
