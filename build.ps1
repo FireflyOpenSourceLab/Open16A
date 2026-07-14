@@ -20,14 +20,17 @@ if (Test-Path -LiteralPath $output) {
 }
 
 if (-not $NoRestore) {
-    & dotnet restore (Join-Path $root "OldSimulator.csproj") "--runtime" $RuntimeIdentifier "--ignore-failed-sources"
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
-    }
-
-    & dotnet restore (Join-Path $root "OldSimulator.Expansion.EmbeddedAsm\OldSimulator.Expansion.EmbeddedAsm.csproj") "--runtime" $RuntimeIdentifier "--ignore-failed-sources"
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
+    $ridProjects = @(
+        "OldSimulator.csproj",
+        "OldSimulator.Expansion.EmbeddedAsm\OldSimulator.Expansion.EmbeddedAsm.csproj",
+        "toolchains\Open16A-ASM\Open16A-ASM.csproj",
+        "toolchains\Open16A-LD\Open16A-LD.csproj"
+    )
+    foreach ($project in $ridProjects) {
+        & dotnet restore (Join-Path $root $project) "--runtime" $RuntimeIdentifier "--force-evaluate" "--ignore-failed-sources"
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
     }
 }
 
