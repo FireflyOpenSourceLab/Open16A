@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("win-x64", "win-arm64", "linux-x64", "all")]
+    [ValidateSet("win-x64", "win-arm64", "linux-x64", "osx-arm64", "all")]
     [string]$RuntimeIdentifier = "all",
     [string]$OutputDirectory,
     [switch]$NoRestore
@@ -11,7 +11,7 @@ if ($RuntimeIdentifier -eq "all" -and -not [string]::IsNullOrWhiteSpace($OutputD
     throw "OutputDirectory cannot be used when RuntimeIdentifier is all."
 }
 if ($RuntimeIdentifier -eq "all") {
-    foreach ($runtime in @("win-x64", "linux-x64")) {
+    foreach ($runtime in @("win-x64", "linux-x64", "osx-arm64")) {
         & $PSCommandPath -RuntimeIdentifier $runtime
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
