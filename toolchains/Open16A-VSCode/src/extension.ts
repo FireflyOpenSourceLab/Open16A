@@ -95,24 +95,7 @@ class StackNavigationProvider implements vscode.CodeLensProvider, vscode.Disposa
     public readonly onDidChangeCodeLenses = this.changed.event;
 
     public provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-        const pairs: StackPair[] = [];
-        const stack: StackInstruction[] = [];
-        const unmatchedPops: StackInstruction[] = [];
-
-        for (let line = 0; line < document.lineCount; line++) {
-            const instruction = parseStackInstruction(document.lineAt(line).text, line);
-            if (!instruction) {
-                continue;
-            }
-
-            if (instruction.kind === "PUSH") {
-                stack.push(instruction);
-            } else if (stack.at(-1)?.register === instruction.register) {
-                pairs.push({ push: stack.pop()!, pop: instruction });
-            } else {
-                unmatchedPops.push(instruction);
-            }
-        }
+        const { pairs, stack, unmatchedPops } = analyzeStack(document);
 
         const lenses: vscode.CodeLens[] = [];
         for (const pair of pairs) {
@@ -133,6 +116,115 @@ class StackNavigationProvider implements vscode.CodeLensProvider, vscode.Disposa
         this.changeSubscription.dispose();
         this.changed.dispose();
     }
+}
+
+function analyzeStack(document: vscode.TextDocument): {
+    pairs: StackPair[];
+    stack: StackInstruction[];
+    unmatchedPops: StackInstruction[];
+} {
+    const pairs: StackPair[] = [];
+    const pushes: StackInstruction[] = [];
+    const pops: StackInstruction[] = [];
+    const labelLines = findLabelLines(document);
+
+    for (let line = 0; line < document.lineCount; line++) {
+        const instruction = parseStackInstruction(document.lineAt(line).text, line);
+        if (instruction?.kind === "PUSH") {
+            pushes.push(instruction);
+        } else if (instruction?.kind === "POP") {
+            pops.push(instruction);
+        }
+    }
+
+    const matchedPushes = new Set<number>();
+    const matchedPops = new Set<number>();
+    for (const push of pushes) {
+        for (const pop of findControlFlowPops(document, push, labelLines)) {
+            pairs.push({ push, pop });
+            matchedPushes.add(push.line);
+            matchedPops.add(pop.line);
+        }
+    }
+
+    return {
+        pairs,
+        stack: pushes.filter(push => !matchedPushes.has(push.line)),
+        unmatchedPops: pops.filter(pop => !matchedPops.has(pop.line))
+    };
+}
+
+function findLabelLines(document: vscode.TextDocument): Map<string, number> {
+    const labels = new Map<string, number>();
+    for (let line = 0; line < document.lineCount; line++) {
+        const match = /^\s*([A-Za-z_.][A-Za-z0-9_.]*)\s*:/.exec(withoutComment(document.lineAt(line).text));
+        if (match) {
+            labels.set(match[1].toUpperCase(), line);
+        }
+    }
+    return labels;
+}
+
+function findControlFlowPops(
+    document: vscode.TextDocument,
+    push: StackInstruction,
+    labelLines: ReadonlyMap<string, number>
+): StackInstruction[] {
+    const candidates: StackInstruction[] = [];
+    const pending = successors(document, push.line, labelLines).map(line => ({ line, stack: [push.register] }));
+    const visited = new Set<string>();
+
+    while (pending.length !== 0) {
+        const state = pending.pop()!;
+        const key = `${state.line}:${state.stack.join(",")}`;
+        if (!visited.add(key)) {
+            continue;
+        }
+
+        const instruction = parseStackInstruction(document.lineAt(state.line).text, state.line);
+        let stack = state.stack;
+        if (instruction) {
+            if (instruction.kind === "PUSH") {
+                if (stack.length >= 32) {
+                    continue;
+                }
+                stack = [...stack, instruction.register];
+            } else if (stack.at(-1) === instruction.register) {
+                stack = stack.slice(0, -1);
+                if (stack.length === 0) {
+                    candidates.push(instruction);
+                    continue;
+                }
+            } else {
+                continue;
+            }
+        }
+
+        for (const nextLine of successors(document, state.line, labelLines)) {
+            pending.push({ line: nextLine, stack });
+        }
+    }
+
+    return candidates;
+}
+
+function successors(document: vscode.TextDocument, line: number, labelLines: ReadonlyMap<string, number>): number[] {
+    const code = withoutComment(document.lineAt(line).text);
+    const jump = /\bJMPA\s+([A-Za-z_.][A-Za-z0-9_.]*)\b/i.exec(code);
+    if (jump) {
+        const target = labelLines.get(jump[1].toUpperCase());
+        return target === undefined ? [] : [target];
+    }
+    if (/\b(?:RET|IRET|HALT)\b/i.test(code)) {
+        return [];
+    }
+    const fallthrough = line + 1 < document.lineCount ? [line + 1] : [];
+    const branch = /\b(?:BEQ|BNE|BLT|BGE|BLO|BHS|BLE|BGT)\b[^;]*,\s*([A-Za-z_.][A-Za-z0-9_.]*)\s*$/i.exec(code);
+    if (!branch) {
+        return fallthrough;
+    }
+    const target = labelLines.get(branch[1].toUpperCase());
+    return target === undefined ? fallthrough : [...fallthrough, target];
 }
 
 function stackWarningLens(source: StackInstruction, message: string): vscode.CodeLens {
@@ -163,13 +255,17 @@ function stackLens(
 }
 
 function parseStackInstruction(text: string, line: number): StackInstruction | undefined {
-    const code = text.split(";", 1)[0];
+    const code = withoutComment(text);
     const match = /^\s*(?:[A-Za-z_.][A-Za-z0-9_.]*\s*:\s*)?(PUSH|POP)\s+(R[0-7])\b/i.exec(code);
     if (!match) {
         return undefined;
     }
 
     return { kind: match[1].toUpperCase() as "PUSH" | "POP", register: match[2].toUpperCase(), line };
+}
+
+function withoutComment(text: string): string {
+    return text.split(";", 1)[0];
 }
 
 export async function deactivate(): Promise<void> {
