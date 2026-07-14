@@ -29,6 +29,11 @@ try
 {
     expansionCards = SimulatorStartup.LoadExpansionCards(startup);
     machine = new Machine(expansionCards: expansionCards);
+    if (startup.ProgramLoad is SimulatorProgramLoad programLoad)
+    {
+        ProgramImageLoader.Load(machine, programLoad.Path, programLoad.BaseAddress);
+        machine.Resume();
+    }
 }
 catch (Exception exception)
 {

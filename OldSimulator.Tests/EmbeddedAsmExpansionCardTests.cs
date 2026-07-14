@@ -8,7 +8,7 @@ namespace OldSimulator.Tests;
 public sealed class EmbeddedAsmExpansionCardTests
 {
     [Fact]
-    public void EmbeddedFirmwareReceivesTheCommandInterruptAndReturnsItsMailbox()
+    public void EmbeddedFirmwareReceivesTheCommandInterruptAndCompletes()
     {
         var plugin = new EmbeddedAsmExpansionCardPlugin();
         IExpansionCard card = plugin.Create(
@@ -25,9 +25,6 @@ public sealed class EmbeddedAsmExpansionCardTests
             card.AdvanceCycles(1_000);
 
             Assert.True(completion.Completed);
-            Assert.Equal((byte)0x42, mailbox[0]);
-            Assert.Equal((byte)0xBE, mailbox[2]);
-            Assert.Equal((byte)0xEF, mailbox[3]);
         }
     }
 

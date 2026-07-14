@@ -227,50 +227,17 @@ public sealed class DebuggerConsole : IDisposable
             throw new ArgumentException($"Usage: {(start ? "loadrun" : "load")} <file> [physical-base]");
 
         uint baseAddress = parts.Length == 3 ? ParseAddress(parts[2]) : Cpu.INITIAL_PROGRAM_COUNTER;
-        byte[] program = File.ReadAllBytes(parts[1]);
-        if (program.Length == 0)
-            throw new ArgumentException("Program file is empty.");
-        if ((baseAddress & 1) != 0)
-            throw new ArgumentException("Program base address must be even.");
-        if ((ulong)baseAddress + (uint)program.Length > Memory.INSTALLED_BYTES)
-            throw new ArgumentException("Program does not fit within physical memory.");
-
-        ulong endAddress = (ulong)baseAddress + (uint)program.Length;
-        if (machine.Memory.HasSystemRom
-            && baseAddress < Memory.SYSTEM_ROM_START + Memory.SYSTEM_ROM_LENGTH
-            && endAddress > Memory.SYSTEM_ROM_START)
-        {
-            throw new ArgumentException("Program range overlaps protected system ROM.");
-        }
-
-        for (var offset = 0; offset < program.Length; offset++)
-            machine.Memory.WritePhysical(baseAddress + (uint)offset, program[offset]);
-
-        machine.Reset();
-        SetEntryPoint(baseAddress);
+        int programLength = ProgramImageLoader.Load(machine, parts[1], baseAddress);
 
         if (start)
         {
             machine.Resume();
             IsOpen = false;
-            return $"Loaded {program.Length} byte(s) at {baseAddress:X5}. Running.";
+            return $"Loaded {programLength} byte(s) at {baseAddress:X5}. Running.";
         }
 
         machine.Pause();
-        return $"Loaded {program.Length} byte(s) at {baseAddress:X5}. {FormatStatus()}";
-    }
-
-    private void SetEntryPoint(uint physicalAddress)
-    {
-        if (physicalAddress < 0xC000)
-        {
-            machine.Cpu.SG = 0;
-            machine.Cpu.PC = (ushort)physicalAddress;
-            return;
-        }
-
-        machine.Cpu.SG = (byte)(physicalAddress >> 14);
-        machine.Cpu.PC = (ushort)(0xC000 | (physicalAddress & 0x3FFF));
+        return $"Loaded {programLength} byte(s) at {baseAddress:X5}. {FormatStatus()}";
     }
 
     private string ReadPort(string[] parts)

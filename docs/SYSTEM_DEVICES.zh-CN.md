@@ -279,7 +279,7 @@ OUT 0020h, R0
 
 扩展卡实现是受信任的 .NET DLL，在普通 JIT 模式的模拟器启动时装载，与模拟器运行在同一进程且不受安全沙箱保护。每个入口 DLL 必须恰好包含一个公开、可无参构造的插件入口类型。插件只应由虚拟周期推进，不得用后台 `Task`、线程或墙钟定时器完成命令。v1 不支持热插拔、guest DMA、插件自定义 I/O 端口或插件直接抬起中断。
 
-默认配置路径是 `AppContext.BaseDirectory/simulator.json`，也可用 `--config <path>` 覆盖；相对 DLL 路径以配置文件所在目录为基准。默认配置文件不存在时八槽均为空；显式 `--config` 指定的文件不存在则启动失败。
+默认配置路径是 `AppContext.BaseDirectory/simulator.json`，也可用 `--config <path>` 覆盖；相对 DLL 路径以配置文件所在目录为基准。默认配置文件不存在时八槽均为空；显式 `--config` 指定的文件不存在则启动失败。`--load <file.bin:physical-base>` 会在启动后将 raw `.bin` 写入给定物理地址、复位机器、设置入口并立即开始执行，例如 `OldSimulator --load "hello.bin:0x0300"`；文件路径使用最后一个冒号与地址分隔，因此可使用 Windows 盘符路径。
 
 ```json
 {

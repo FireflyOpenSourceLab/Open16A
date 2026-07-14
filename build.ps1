@@ -1,12 +1,22 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("win-x64", "win-arm64", "linux-x64")]
-    [string]$RuntimeIdentifier = "win-x64",
+    [ValidateSet("win-x64", "win-arm64", "linux-x64", "all")]
+    [string]$RuntimeIdentifier = "all",
     [string]$OutputDirectory,
     [switch]$NoRestore
 )
 
 $root = [IO.Path]::GetFullPath($PSScriptRoot)
+if ($RuntimeIdentifier -eq "all" -and -not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    throw "OutputDirectory cannot be used when RuntimeIdentifier is all."
+}
+if ($RuntimeIdentifier -eq "all") {
+    foreach ($runtime in @("win-x64", "linux-x64")) {
+        & $PSCommandPath -RuntimeIdentifier $runtime
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+    exit 0
+}
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $root "artifacts\\$RuntimeIdentifier"
 }
