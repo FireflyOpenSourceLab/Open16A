@@ -24,9 +24,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
 
         const dotnetPath = vscode.workspace.getConfiguration("open16a.languageServer").get<string>("dotnetPath", "dotnet");
+        const isManagedAssembly = serverPath.endsWith(".dll");
         const serverOptions: ServerOptions = {
-            command: serverPath.endsWith(".exe") ? serverPath : dotnetPath,
-            args: serverPath.endsWith(".exe") ? [] : [serverPath]
+            command: isManagedAssembly ? dotnetPath : serverPath,
+            args: isManagedAssembly ? [serverPath] : []
         };
         const clientOptions: LanguageClientOptions = {
             documentSelector: [{ language: "open16a", scheme: "file" }],
@@ -60,10 +61,15 @@ export async function deactivate(): Promise<void> {
 
 function findServerPath(extensionPath: string): string | undefined {
     const configured = vscode.workspace.getConfiguration("open16a.languageServer").get<string>("path", "").trim();
+    const bundledServer = process.platform === "win32"
+        ? path.join(extensionPath, "server", "win-x64", "Open16A-LSP.exe")
+        : process.platform === "linux"
+            ? path.join(extensionPath, "server", "linux-x64", "Open16A-LSP")
+            : "";
     const candidates = [
         configured,
         process.env.OPEN16A_LSP_PATH,
-        path.join(extensionPath, "server", "Open16A-LSP.exe"),
+        bundledServer,
         ...vscode.workspace.workspaceFolders?.flatMap(folder => [
             path.join(folder.uri.fsPath, "Open16A-LSP.dll"),
             path.join(folder.uri.fsPath, "toolchains", "Open16A-LSP", "bin", "Debug", "net10.0", "Open16A-LSP.dll")

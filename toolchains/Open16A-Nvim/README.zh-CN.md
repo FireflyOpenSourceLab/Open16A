@@ -2,7 +2,13 @@
 
 这个插件按当前 `nvim-lspconfig` 配置约定提供 `open16a` server config，并以 Neovim 0.11+ 的 `vim.lsp.config` / `vim.lsp.enable` API 启用它。它为 `.o16a` 和 `.asm` 自动设置 `open16a` filetype。
 
-先构建 LSP：
+发布版 `Open16A-Nvim.zip` 已内置 Windows x64 与 Linux x64 的自包含 LSP；解压后直接由插件按当前平台启动，无需安装 `dotnet`。从仓库根目录运行以下脚本可重新生成该 ZIP、两个平台的工具与 VS Code 扩展：
+
+```powershell
+.\build-toolchains.ps1
+```
+
+开发工作区模式仍可使用 DLL 版 LSP：
 
 ```sh
 cd /mnt/d/sim/OldSimulator

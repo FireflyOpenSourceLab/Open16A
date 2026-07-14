@@ -30,11 +30,29 @@ local function workspace_server_path(start_path)
     return nil
 end
 
+local function bundled_server_path()
+    local source = debug.getinfo(1, "S").source:sub(2)
+    local plugin_root = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(source)))
+    local sysname = vim.uv.os_uname().sysname
+    local relative = sysname == "Windows_NT"
+        and { "lsp", "win-x64", "Open16A-LSP.exe" }
+        or sysname == "Linux"
+            and { "lsp", "linux-x64", "Open16A-LSP" }
+            or nil
+    if not relative then
+        return nil
+    end
+
+    local candidate = vim.fs.joinpath(plugin_root, unpack(relative))
+    return exists(candidate) and candidate or nil
+end
+
 local function server_path(buffer)
     local buffer_name = buffer and vim.api.nvim_buf_get_name(buffer) or ""
     return options.server_path
         or vim.g.open16a_lsp_path
         or vim.env.OPEN16A_LSP_PATH
+        or bundled_server_path()
         or (buffer_name ~= "" and workspace_server_path(buffer_name))
         or workspace_server_path(vim.fn.getcwd())
 end
@@ -54,9 +72,8 @@ function M.setup(user_options, buffer)
         return false
     end
 
-    vim.lsp.config("open16a", {
-        cmd = { options.dotnet_path, path }
-    })
+    local command = path:match("%.dll$") and { options.dotnet_path, path } or { path }
+    vim.lsp.config("open16a", { cmd = command })
     vim.lsp.enable("open16a")
     return true
 end
