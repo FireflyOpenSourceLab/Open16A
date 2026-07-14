@@ -95,13 +95,18 @@ public sealed class LanguageServer
     {
         var items = new JsonArray();
         foreach (string mnemonic in LanguageDocument.Mnemonics)
-            items.Add(new JsonObject { ["label"] = mnemonic, ["kind"] = 14, ["detail"] = "Open16A instruction" });
+            items.Add(CompletionItem(parameters, mnemonic, 14, "Open16A instruction"));
         foreach (string directive in new[] { ".org", ".byte", ".word" })
-            items.Add(new JsonObject { ["label"] = directive, ["kind"] = 14, ["detail"] = "Open16A assembler directive", ["textEdit"] = DirectiveTextEdit(parameters, directive) });
+            items.Add(CompletionItem(parameters, directive, 14, "Open16A assembler directive"));
         for (var index = 0; index < 8; index++)
         {
-            items.Add(new JsonObject { ["label"] = $"R{index}", ["kind"] = 6, ["detail"] = "16-bit general-purpose register" });
-            items.Add(new JsonObject { ["label"] = $"FP{index}", ["kind"] = 6, ["detail"] = "32-bit floating-point register" });
+            items.Add(CompletionItem(parameters, $"R{index}", 6, "16-bit general-purpose register"));
+            items.Add(CompletionItem(parameters, $"FP{index}", 6, "32-bit floating-point register"));
+        }
+        if (TryDocumentPosition(parameters, out LanguageDocument document, out _))
+        {
+            foreach (LabelInfo label in document.Labels.Values.OrderBy(label => label.Name, StringComparer.OrdinalIgnoreCase))
+                items.Add(CompletionItem(parameters, label.Name, 18, $"Open16A label at {label.Address:X5}h"));
         }
         return new JsonObject { ["isIncomplete"] = false, ["items"] = items };
     }
@@ -176,19 +181,31 @@ public sealed class LanguageServer
         return SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["method"] = "textDocument/publishDiagnostics", ["params"] = new JsonObject { ["uri"] = uri, ["diagnostics"] = values } }, cancellationToken);
     }
 
-    private JsonObject DirectiveTextEdit(JsonElement parameters, string directive)
+    private JsonObject CompletionItem(JsonElement parameters, string label, int kind, string detail) => new()
+    {
+        ["label"] = label,
+        ["kind"] = kind,
+        ["detail"] = detail,
+        ["textEdit"] = ReplacementTextEdit(parameters, label)
+    };
+
+    private JsonObject ReplacementTextEdit(JsonElement parameters, string text)
     {
         if (!TryDocumentPosition(parameters, out LanguageDocument document, out TextPosition position))
-            return new JsonObject { ["newText"] = directive, ["range"] = ToProtocolRange(new TextRange(position, position)) };
+            return new JsonObject { ["newText"] = text, ["range"] = ToProtocolRange(new TextRange(position, position)) };
         string line = document.Lines[position.Line];
         int start = Math.Clamp(position.Character, 0, line.Length);
-        while (start > 0 && (char.IsLetterOrDigit(line[start - 1]) || line[start - 1] is '_' or '.')) start--;
+        int end = start;
+        while (start > 0 && IsCompletionCharacter(line[start - 1])) start--;
+        while (end < line.Length && IsCompletionCharacter(line[end])) end++;
         return new JsonObject
         {
-            ["newText"] = directive,
-            ["range"] = ToProtocolRange(new TextRange(new TextPosition(position.Line, start), position))
+            ["newText"] = text,
+            ["range"] = ToProtocolRange(new TextRange(new TextPosition(position.Line, start), new TextPosition(position.Line, end)))
         };
     }
+
+    private static bool IsCompletionCharacter(char value) => char.IsLetterOrDigit(value) || value is '_' or '.';
 
     private bool TryDocumentPosition(JsonElement parameters, out LanguageDocument document, out TextPosition position)
     {
