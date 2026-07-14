@@ -17,7 +17,7 @@ if (Test-Path -LiteralPath $output) {
 }
 New-Item -ItemType Directory -Path $output | Out-Null
 
-$runtimes = @("win-x64", "linux-x64")
+$runtimes = @("win-x64", "linux-x64", "osx-arm64")
 $projects = @(
     @{ Name = "open16a-asm"; Project = "toolchains\\Open16A-ASM\\Open16A-ASM.csproj" },
     @{ Name = "open16a-ld"; Project = "toolchains\\Open16A-LD\\Open16A-LD.csproj" },
@@ -85,7 +85,7 @@ finally {
 
 $vsce = Join-Path $vscode "node_modules\\.bin\\vsce.cmd"
 foreach ($runtime in $runtimes) {
-    $target = if ($runtime -eq "win-x64") { "win32-x64" } else { "linux-x64" }
+    $target = if ($runtime -eq "win-x64") { "win32-x64" } elseif ($runtime -eq "linux-x64") { "linux-x64" } else { "darwin-arm64" }
     $serverName = if ($runtime -eq "win-x64") { "Open16A-LSP.exe" } else { "Open16A-LSP" }
     $stage = Join-Path $output "vscode-stage\\$target"
     $extension = Join-Path $stage "extension"

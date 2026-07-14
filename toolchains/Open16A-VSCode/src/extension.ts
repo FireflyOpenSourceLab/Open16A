@@ -65,7 +65,9 @@ function findServerPath(extensionPath: string): string | undefined {
         ? path.join(extensionPath, "server", "win-x64", "Open16A-LSP.exe")
         : process.platform === "linux"
             ? path.join(extensionPath, "server", "linux-x64", "Open16A-LSP")
-            : "";
+            : process.platform === "darwin"
+                ? path.join(extensionPath, "server", "osx-arm64", "Open16A-LSP")
+                : "";
     const candidates = [
         configured,
         process.env.OPEN16A_LSP_PATH,

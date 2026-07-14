@@ -38,6 +38,8 @@ local function bundled_server_path()
         and { "lsp", "win-x64", "Open16A-LSP.exe" }
         or sysname == "Linux"
             and { "lsp", "linux-x64", "Open16A-LSP" }
+            or sysname == "Darwin"
+                and { "lsp", "osx-arm64", "Open16A-LSP" }
             or nil
     if not relative then
         return nil
