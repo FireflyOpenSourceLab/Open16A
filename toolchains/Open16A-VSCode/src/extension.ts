@@ -8,7 +8,6 @@ import {
 } from "vscode-languageclient/node";
 
 let client: LanguageClient | undefined;
-let stackConnectorDecoration: vscode.TextEditorDecorationType | undefined;
 
 interface StackInstruction {
     readonly kind: "PUSH" | "POP";
@@ -76,34 +75,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ));
 
     const stackNavigation = new StackNavigationProvider();
-    stackConnectorDecoration = vscode.window.createTextEditorDecorationType({
-        before: {
-            color: new vscode.ThemeColor("editorCodeLens.foreground"),
-            margin: "0 0.65em 0 0"
-        }
-    });
-    const refreshStackConnectors = (): void => {
-        for (const editor of vscode.window.visibleTextEditors) {
-            if (editor.document.languageId === "open16a") {
-                editor.setDecorations(stackConnectorDecoration!, createStackConnectorDecorations(editor.document));
-            }
-        }
-    };
     context.subscriptions.push(
         stackNavigation,
-        stackConnectorDecoration,
-        vscode.languages.registerCodeLensProvider({ language: "open16a", scheme: "file" }, stackNavigation),
-        vscode.window.onDidChangeActiveTextEditor(refreshStackConnectors),
-        vscode.window.onDidChangeVisibleTextEditors(refreshStackConnectors),
-        vscode.workspace.onDidChangeTextDocument(event => {
-            for (const editor of vscode.window.visibleTextEditors) {
-                if (editor.document === event.document && editor.document.languageId === "open16a") {
-                    editor.setDecorations(stackConnectorDecoration!, createStackConnectorDecorations(editor.document));
-                }
-            }
-        })
+        vscode.languages.registerCodeLensProvider({ language: "open16a", scheme: "file" }, stackNavigation)
     );
-    refreshStackConnectors();
 
     context.subscriptions.push({ dispose: () => client?.stop() });
     await start();
@@ -120,7 +95,24 @@ class StackNavigationProvider implements vscode.CodeLensProvider, vscode.Disposa
     public readonly onDidChangeCodeLenses = this.changed.event;
 
     public provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-        const { pairs, stack, unmatchedPops } = analyzeStack(document);
+        const pairs: StackPair[] = [];
+        const stack: StackInstruction[] = [];
+        const unmatchedPops: StackInstruction[] = [];
+
+        for (let line = 0; line < document.lineCount; line++) {
+            const instruction = parseStackInstruction(document.lineAt(line).text, line);
+            if (!instruction) {
+                continue;
+            }
+
+            if (instruction.kind === "PUSH") {
+                stack.push(instruction);
+            } else if (stack.at(-1)?.register === instruction.register) {
+                pairs.push({ push: stack.pop()!, pop: instruction });
+            } else {
+                unmatchedPops.push(instruction);
+            }
+        }
 
         const lenses: vscode.CodeLens[] = [];
         for (const pair of pairs) {
@@ -141,46 +133,6 @@ class StackNavigationProvider implements vscode.CodeLensProvider, vscode.Disposa
         this.changeSubscription.dispose();
         this.changed.dispose();
     }
-}
-
-function createStackConnectorDecorations(document: vscode.TextDocument): vscode.DecorationOptions[] {
-    const decorations: vscode.DecorationOptions[] = [];
-    for (const pair of analyzeStack(document).pairs) {
-        for (let line = pair.push.line; line <= pair.pop.line; line++) {
-            const glyph = line === pair.push.line ? "┌" : line === pair.pop.line ? "╰" : "│";
-            decorations.push({
-                range: new vscode.Range(line, 0, line, 0),
-                renderOptions: { before: { contentText: glyph } }
-            });
-        }
-    }
-    return decorations;
-}
-
-function analyzeStack(document: vscode.TextDocument): {
-    pairs: StackPair[];
-    stack: StackInstruction[];
-    unmatchedPops: StackInstruction[];
-} {
-    const pairs: StackPair[] = [];
-    const stack: StackInstruction[] = [];
-    const unmatchedPops: StackInstruction[] = [];
-
-    for (let line = 0; line < document.lineCount; line++) {
-        const instruction = parseStackInstruction(document.lineAt(line).text, line);
-        if (!instruction) {
-            continue;
-        }
-        if (instruction.kind === "PUSH") {
-            stack.push(instruction);
-        } else if (stack.at(-1)?.register === instruction.register) {
-            pairs.push({ push: stack.pop()!, pop: instruction });
-        } else {
-            unmatchedPops.push(instruction);
-        }
-    }
-
-    return { pairs, stack, unmatchedPops };
 }
 
 function stackWarningLens(source: StackInstruction, message: string): vscode.CodeLens {
