@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("win-x64", "win-arm64")]
+    [ValidateSet("win-x64", "win-arm64", "linux-x64")]
     [string]$RuntimeIdentifier = "win-x64",
     [string]$OutputDirectory,
     [switch]$NoRestore
