@@ -37,6 +37,10 @@
       {
         "command": "open16a.restartLanguageServer",
         "title": "Open16A: Restart Language Server"
+      },
+      {
+        "command": "open16a.goToStackMatch",
+        "title": "Open16A: Go to Matching Stack Instruction"
       }
     ],
     "configuration": {

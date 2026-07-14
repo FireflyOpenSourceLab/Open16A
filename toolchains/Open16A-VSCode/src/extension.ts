@@ -9,6 +9,17 @@ import {
 
 let client: LanguageClient | undefined;
 
+interface StackInstruction {
+    readonly kind: "PUSH" | "POP";
+    readonly register: string;
+    readonly line: number;
+}
+
+interface StackPair {
+    readonly push: StackInstruction;
+    readonly pop: StackInstruction;
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
     const start = async (): Promise<void> => {
         if (client) {
@@ -48,8 +59,117 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         await start();
     }));
 
+    context.subscriptions.push(vscode.commands.registerCommand(
+        "open16a.goToStackMatch",
+        async (uri: vscode.Uri, line: number) => {
+            const document = await vscode.workspace.openTextDocument(uri);
+            const editor = await vscode.window.showTextDocument(document);
+            const position = new vscode.Position(line, 0);
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+        }
+    ));
+    context.subscriptions.push(vscode.commands.registerCommand(
+        "open16a.showStackWarning",
+        (message: string) => vscode.window.showWarningMessage(message)
+    ));
+
+    const stackNavigation = new StackNavigationProvider();
+    context.subscriptions.push(
+        stackNavigation,
+        vscode.languages.registerCodeLensProvider({ language: "open16a", scheme: "file" }, stackNavigation)
+    );
+
     context.subscriptions.push({ dispose: () => client?.stop() });
     await start();
+}
+
+class StackNavigationProvider implements vscode.CodeLensProvider, vscode.Disposable {
+    private readonly changed = new vscode.EventEmitter<void>();
+    private readonly changeSubscription = vscode.workspace.onDidChangeTextDocument(event => {
+        if (event.document.languageId === "open16a") {
+            this.changed.fire();
+        }
+    });
+
+    public readonly onDidChangeCodeLenses = this.changed.event;
+
+    public provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+        const pairs: StackPair[] = [];
+        const stack: StackInstruction[] = [];
+        const unmatchedPops: StackInstruction[] = [];
+
+        for (let line = 0; line < document.lineCount; line++) {
+            const instruction = parseStackInstruction(document.lineAt(line).text, line);
+            if (!instruction) {
+                continue;
+            }
+
+            if (instruction.kind === "PUSH") {
+                stack.push(instruction);
+            } else if (stack.at(-1)?.register === instruction.register) {
+                pairs.push({ push: stack.pop()!, pop: instruction });
+            } else {
+                unmatchedPops.push(instruction);
+            }
+        }
+
+        const lenses: vscode.CodeLens[] = [];
+        for (const pair of pairs) {
+            lenses.push(stackLens(document, pair.push, pair.pop, "↓"));
+            lenses.push(stackLens(document, pair.pop, pair.push, "↑"));
+        }
+        for (const push of stack) {
+            lenses.push(stackWarningLens(push, `no matching POP ${push.register}`));
+        }
+        for (const pop of unmatchedPops) {
+            lenses.push(stackWarningLens(pop, `no matching PUSH ${pop.register}`));
+        }
+
+        return lenses;
+    }
+
+    public dispose(): void {
+        this.changeSubscription.dispose();
+        this.changed.dispose();
+    }
+}
+
+function stackWarningLens(source: StackInstruction, message: string): vscode.CodeLens {
+    return new vscode.CodeLens(
+        new vscode.Range(source.line, 0, source.line, 0),
+        {
+            title: `$(warning) ${message}`,
+            command: "open16a.showStackWarning",
+            arguments: [`Open16A stack balance: ${message}.`]
+        }
+    );
+}
+
+function stackLens(
+    document: vscode.TextDocument,
+    source: StackInstruction,
+    target: StackInstruction,
+    arrow: "↓" | "↑"
+): vscode.CodeLens {
+    return new vscode.CodeLens(
+        new vscode.Range(source.line, 0, source.line, 0),
+        {
+            title: `${arrow} ${target.kind} ${target.register}: line ${target.line + 1}`,
+            command: "open16a.goToStackMatch",
+            arguments: [document.uri, target.line]
+        }
+    );
+}
+
+function parseStackInstruction(text: string, line: number): StackInstruction | undefined {
+    const code = text.split(";", 1)[0];
+    const match = /^\s*(?:[A-Za-z_.][A-Za-z0-9_.]*\s*:\s*)?(PUSH|POP)\s+(R[0-7])\b/i.exec(code);
+    if (!match) {
+        return undefined;
+    }
+
+    return { kind: match[1].toUpperCase() as "PUSH" | "POP", register: match[2].toUpperCase(), line };
 }
 
 export async function deactivate(): Promise<void> {
