@@ -8,6 +8,7 @@ import {
 } from "vscode-languageclient/node";
 
 let client: LanguageClient | undefined;
+let stoppingClient: Promise<void> | undefined;
 
 interface StackInstruction {
     readonly kind: "PUSH" | "POP";
@@ -19,6 +20,35 @@ interface StackPair {
     readonly push: StackInstruction;
     readonly pop: StackInstruction;
 }
+
+interface StackAnalysis {
+    readonly pairs: readonly StackPair[];
+    readonly unmatchedPushes: readonly StackInstruction[];
+    readonly unmatchedPops: readonly StackInstruction[];
+    readonly depthLimited: readonly StackInstruction[];
+    readonly stateLimited: boolean;
+}
+
+interface CachedStackAnalysis {
+    readonly version: number;
+    readonly analysis: StackAnalysis;
+}
+
+interface ParsedLine {
+    readonly instruction: StackInstruction | undefined;
+    readonly successors: readonly number[];
+}
+
+interface StackFrame {
+    readonly id: number;
+    readonly depth: number;
+    readonly push: StackInstruction;
+    readonly previous: StackFrame | undefined;
+}
+
+const MAX_STACK_DEPTH = 64;
+const MAX_ANALYSIS_STATES = 25_000;
+const ANALYSIS_YIELD_INTERVAL = 256;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
     const start = async (): Promise<void> => {
@@ -52,10 +82,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     };
 
     context.subscriptions.push(vscode.commands.registerCommand("open16a.restartLanguageServer", async () => {
-        if (client) {
-            await client.stop();
-            client = undefined;
-        }
+        await stopClient();
         await start();
     }));
 
@@ -80,14 +107,37 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.languages.registerCodeLensProvider({ language: "open16a", scheme: "file" }, stackNavigation)
     );
 
-    context.subscriptions.push({ dispose: () => client?.stop() });
+    context.subscriptions.push({ dispose: () => { void stopClient(); } });
     await start();
+}
+
+async function stopClient(): Promise<void> {
+    if (stoppingClient) {
+        return stoppingClient;
+    }
+
+    const active = client;
+    client = undefined;
+    if (!active) {
+        return;
+    }
+
+    stoppingClient = active.stop().catch(error => {
+        // VS Code may already have destroyed the stdio transport during shutdown.
+        console.warn("Open16A language server stop completed with a closed transport.", error);
+    }).finally(() => {
+        stoppingClient = undefined;
+    });
+    return stoppingClient;
 }
 
 class StackNavigationProvider implements vscode.CodeLensProvider, vscode.Disposable {
     private readonly changed = new vscode.EventEmitter<void>();
+    private readonly analysisCache = new Map<string, CachedStackAnalysis>();
+    private readonly pendingAnalyses = new Map<string, Promise<StackAnalysis>>();
     private readonly changeSubscription = vscode.workspace.onDidChangeTextDocument(event => {
         if (event.document.languageId === "open16a") {
+            this.analysisCache.delete(event.document.uri.toString());
             this.changed.fire();
         }
     });
@@ -99,26 +149,62 @@ class StackNavigationProvider implements vscode.CodeLensProvider, vscode.Disposa
 
     public readonly onDidChangeCodeLenses = this.changed.event;
 
-    public provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+    public async provideCodeLenses(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.CodeLens[]> {
         if (!stackNavigationEnabled()) {
             return [];
         }
 
-        const { pairs, stack, unmatchedPops } = analyzeStack(document);
+        const analysis = await this.getAnalysis(document);
+        if (token.isCancellationRequested) {
+            return [];
+        }
 
         const lenses: vscode.CodeLens[] = [];
-        for (const pair of pairs) {
+        for (const pair of analysis.pairs) {
             lenses.push(stackLens(document, pair.push, pair.pop, "↓"));
             lenses.push(stackLens(document, pair.pop, pair.push, "↑"));
         }
-        for (const push of stack) {
+        for (const push of analysis.unmatchedPushes) {
             lenses.push(stackWarningLens(push, `no matching POP ${push.register}`));
         }
-        for (const pop of unmatchedPops) {
+        for (const pop of analysis.unmatchedPops) {
             lenses.push(stackWarningLens(pop, `no matching PUSH ${pop.register}`));
+        }
+        for (const push of analysis.depthLimited) {
+            lenses.push(stackWarningLens(push, "analysis stopped at the stack-depth limit"));
+        }
+        if (analysis.stateLimited) {
+            lenses.push(analysisLimitLens());
         }
 
         return lenses;
+    }
+
+    private async getAnalysis(document: vscode.TextDocument): Promise<StackAnalysis> {
+        const uri = document.uri.toString();
+        const cached = this.analysisCache.get(uri);
+        if (cached?.version === document.version) {
+            return cached.analysis;
+        }
+
+        const version = document.version;
+        const key = `${uri}@${version}`;
+        let pending = this.pendingAnalyses.get(key);
+        if (!pending) {
+            const lines = document.getText().split(/\r?\n/);
+            pending = analyzeStackAsync(lines);
+            this.pendingAnalyses.set(key, pending);
+            void pending.then(
+                () => this.pendingAnalyses.delete(key),
+                () => this.pendingAnalyses.delete(key)
+            );
+        }
+
+        const analysis = await pending;
+        if (document.version === version) {
+            this.analysisCache.set(uri, { version, analysis });
+        }
+        return analysis;
     }
 
     public dispose(): void {
@@ -132,113 +218,175 @@ function stackNavigationEnabled(): boolean {
     return vscode.workspace.getConfiguration("open16a.stackNavigation").get<boolean>("enabled", false);
 }
 
-function analyzeStack(document: vscode.TextDocument): {
-    pairs: StackPair[];
-    stack: StackInstruction[];
-    unmatchedPops: StackInstruction[];
-} {
-    const pairs: StackPair[] = [];
-    const pushes: StackInstruction[] = [];
-    const pops: StackInstruction[] = [];
-    const labelLines = findLabelLines(document);
+async function analyzeStackAsync(lines: readonly string[]): Promise<StackAnalysis> {
+    if (lines.length === 0) {
+        return { pairs: [], unmatchedPushes: [], unmatchedPops: [], depthLimited: [], stateLimited: false };
+    }
 
-    for (let line = 0; line < document.lineCount; line++) {
-        const instruction = parseStackInstruction(document.lineAt(line).text, line);
-        if (instruction?.kind === "PUSH") {
-            pushes.push(instruction);
-        } else if (instruction?.kind === "POP") {
-            pops.push(instruction);
+    const labelLines = new Map<string, number>();
+    const code = new Array<string>(lines.length);
+
+    for (let line = 0; line < lines.length; line++) {
+        code[line] = withoutComment(lines[line]);
+        const match = /^\s*([A-Za-z_.][A-Za-z0-9_.]*)\s*:/.exec(code[line]);
+        if (match) {
+            labelLines.set(match[1].toUpperCase(), line);
+        }
+        if ((line + 1) % ANALYSIS_YIELD_INTERVAL === 0) {
+            await yieldToExtensionHost();
         }
     }
 
-    const matchedPushes = new Set<number>();
-    const matchedPops = new Set<number>();
-    for (const push of pushes) {
-        for (const pop of findControlFlowPops(document, push, labelLines)) {
-            pairs.push({ push, pop });
-            matchedPushes.add(push.line);
-            matchedPops.add(pop.line);
+    const parsed = new Array<ParsedLine>(lines.length);
+    for (let line = 0; line < lines.length; line++) {
+        parsed[line] = {
+            instruction: parseStackInstruction(code[line], line),
+            successors: successors(code[line], line, lines.length, labelLines)
+        };
+        if ((line + 1) % ANALYSIS_YIELD_INTERVAL === 0) {
+            await yieldToExtensionHost();
         }
+    }
+
+    const pairs = new Map<string, StackPair>();
+    const unmatchedPushes = new Map<number, StackInstruction>();
+    const unmatchedPops = new Map<number, StackInstruction>();
+    const depthLimited = new Map<number, StackInstruction>();
+    const frames = new Map<string, StackFrame>();
+    const visited = new Map<number, Set<number>>();
+    const pending: Array<{ line: number; stack: StackFrame | undefined }> = [];
+    const roots = new Set<number>([0]);
+    for (const line of code) {
+        const call = /\bCALLA\s+([A-Za-z_.][A-Za-z0-9_.]*)\b/i.exec(line);
+        if (call) {
+            const target = labelLines.get(call[1].toUpperCase());
+            if (target !== undefined) {
+                roots.add(target);
+            }
+        }
+    }
+    let nextFrameId = 1;
+    let visitedStates = 0;
+    let stateLimited = false;
+
+    for (const line of roots) {
+        pending.push({ line, stack: undefined });
+    }
+    // Seed every save as well as known entry points so unreferenced or indirectly-called routines still get navigation.
+    for (const line of parsed) {
+        if (line.instruction?.kind === "PUSH") {
+            pending.push({ line: line.instruction.line, stack: undefined });
+        }
+    }
+
+    while (pending.length !== 0) {
+        if (visitedStates >= MAX_ANALYSIS_STATES) {
+            stateLimited = true;
+            break;
+        }
+
+        const state = pending.pop()!;
+        const stackId = state.stack?.id ?? 0;
+        let statesAtLine = visited.get(state.line);
+        if (!statesAtLine) {
+            statesAtLine = new Set<number>();
+            visited.set(state.line, statesAtLine);
+        }
+        if (statesAtLine.has(stackId)) {
+            continue;
+        }
+        statesAtLine.add(stackId);
+        visitedStates++;
+
+        const current = parsed[state.line];
+        let stack = state.stack;
+        if (current.instruction?.kind === "PUSH") {
+            if (stack && stack.depth >= MAX_STACK_DEPTH) {
+                depthLimited.set(current.instruction.line, current.instruction);
+                continue;
+            }
+            const frameKey = `${stack?.id ?? 0}:${current.instruction.line}`;
+            stack = frames.get(frameKey);
+            if (!stack) {
+                stack = {
+                    id: nextFrameId++,
+                    depth: (state.stack?.depth ?? 0) + 1,
+                    push: current.instruction,
+                    previous: state.stack
+                };
+                frames.set(frameKey, stack);
+            }
+        } else if (current.instruction?.kind === "POP") {
+            if (!stack || stack.push.register !== current.instruction.register) {
+                unmatchedPops.set(current.instruction.line, current.instruction);
+                continue;
+            }
+            pairs.set(`${stack.push.line}:${current.instruction.line}`, { push: stack.push, pop: current.instruction });
+            unmatchedPops.delete(current.instruction.line);
+            stack = stack.previous;
+        }
+
+        if (current.successors.length === 0) {
+            recordUnmatchedStack(stack, unmatchedPushes);
+            continue;
+        }
+        for (const nextLine of current.successors) {
+            pending.push({ line: nextLine, stack });
+        }
+
+        if (visitedStates % ANALYSIS_YIELD_INTERVAL === 0) {
+            await yieldToExtensionHost();
+        }
+    }
+
+    // A POP that is not the strict LIFO mate of any PUSH is always unbalanced, even in an unreachable block.
+    foreach: for (const line of parsed) {
+        if (line.instruction?.kind !== "POP") {
+            continue;
+        }
+        for (const pair of pairs.values()) {
+            if (pair.pop.line === line.instruction.line) {
+                continue foreach;
+            }
+        }
+        unmatchedPops.set(line.instruction.line, line.instruction);
     }
 
     return {
-        pairs,
-        stack: pushes.filter(push => !matchedPushes.has(push.line)),
-        unmatchedPops: pops.filter(pop => !matchedPops.has(pop.line))
+        pairs: [...pairs.values()],
+        unmatchedPushes: [...unmatchedPushes.values()],
+        unmatchedPops: [...unmatchedPops.values()],
+        depthLimited: [...depthLimited.values()],
+        stateLimited
     };
 }
 
-function findLabelLines(document: vscode.TextDocument): Map<string, number> {
-    const labels = new Map<string, number>();
-    for (let line = 0; line < document.lineCount; line++) {
-        const match = /^\s*([A-Za-z_.][A-Za-z0-9_.]*)\s*:/.exec(withoutComment(document.lineAt(line).text));
-        if (match) {
-            labels.set(match[1].toUpperCase(), line);
-        }
+function recordUnmatchedStack(stack: StackFrame | undefined, unmatchedPushes: Map<number, StackInstruction>): void {
+    for (let frame = stack; frame; frame = frame.previous) {
+        unmatchedPushes.set(frame.push.line, frame.push);
     }
-    return labels;
 }
 
-function findControlFlowPops(
-    document: vscode.TextDocument,
-    push: StackInstruction,
-    labelLines: ReadonlyMap<string, number>
-): StackInstruction[] {
-    const candidates: StackInstruction[] = [];
-    const pending = successors(document, push.line, labelLines).map(line => ({ line, stack: [push.register] }));
-    const visited = new Set<string>();
-
-    while (pending.length !== 0) {
-        const state = pending.pop()!;
-        const key = `${state.line}:${state.stack.join(",")}`;
-        if (!visited.add(key)) {
-            continue;
-        }
-
-        const instruction = parseStackInstruction(document.lineAt(state.line).text, state.line);
-        let stack = state.stack;
-        if (instruction) {
-            if (instruction.kind === "PUSH") {
-                if (stack.length >= 32) {
-                    continue;
-                }
-                stack = [...stack, instruction.register];
-            } else if (stack.at(-1) === instruction.register) {
-                stack = stack.slice(0, -1);
-                if (stack.length === 0) {
-                    candidates.push(instruction);
-                    continue;
-                }
-            } else {
-                continue;
-            }
-        }
-
-        for (const nextLine of successors(document, state.line, labelLines)) {
-            pending.push({ line: nextLine, stack });
-        }
-    }
-
-    return candidates;
-}
-
-function successors(document: vscode.TextDocument, line: number, labelLines: ReadonlyMap<string, number>): number[] {
-    const code = withoutComment(document.lineAt(line).text);
+function successors(code: string, line: number, lineCount: number, labelLines: ReadonlyMap<string, number>): number[] {
+    const fallthrough = line + 1 < lineCount ? [line + 1] : [];
     const jump = /\bJMPA\s+([A-Za-z_.][A-Za-z0-9_.]*)\b/i.exec(code);
     if (jump) {
         const target = labelLines.get(jump[1].toUpperCase());
         return target === undefined ? [] : [target];
     }
-    if (/\b(?:RET|IRET|HALT)\b/i.test(code)) {
+    if (/\b(?:JMP|JMPL|RET|RETL|IRET|HALT)\b/i.test(code)) {
         return [];
     }
-    const fallthrough = line + 1 < document.lineCount ? [line + 1] : [];
-    const branch = /\b(?:BEQ|BNE|BLT|BGE|BLO|BHS|BLE|BGT)\b[^;]*,\s*([A-Za-z_.][A-Za-z0-9_.]*)\s*$/i.exec(code);
+    const branch = /\b(?:BEQ|BNE|BLT|BGE|BLO|BHS|BLE|BGT)\s+R[0-7]\s*,\s*R[0-7]\s*,\s*([A-Za-z_.][A-Za-z0-9_.]*)\b/i.exec(code);
     if (!branch) {
         return fallthrough;
     }
     const target = labelLines.get(branch[1].toUpperCase());
     return target === undefined ? fallthrough : [...fallthrough, target];
+}
+
+function yieldToExtensionHost(): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, 0));
 }
 
 function stackWarningLens(source: StackInstruction, message: string): vscode.CodeLens {
@@ -278,30 +426,45 @@ function parseStackInstruction(text: string, line: number): StackInstruction | u
     return { kind: match[1].toUpperCase() as "PUSH" | "POP", register: match[2].toUpperCase(), line };
 }
 
+function analysisLimitLens(): vscode.CodeLens {
+    return new vscode.CodeLens(
+        new vscode.Range(0, 0, 0, 0),
+        {
+            title: "$(warning) stack analysis stopped at the control-flow state limit",
+            command: "open16a.showStackWarning",
+            arguments: ["Open16A stack balance: analysis stopped at the control-flow state limit."]
+        }
+    );
+}
+
 function withoutComment(text: string): string {
-    return text.split(";", 1)[0];
+    for (let index = 0; index < text.length; index++) {
+        if (text[index] === ";" || (text[index] === "/" && text[index + 1] === "/")) {
+            return text.slice(0, index);
+        }
+    }
+    return text;
 }
 
 export async function deactivate(): Promise<void> {
-    if (client) {
-        await client.stop();
-        client = undefined;
-    }
+    await stopClient();
 }
 
 function findServerPath(extensionPath: string): string | undefined {
     const configured = vscode.workspace.getConfiguration("open16a.languageServer").get<string>("path", "").trim();
-    const bundledServer = process.platform === "win32"
+    const bundledNativeServer = process.platform === "win32"
         ? path.join(extensionPath, "server", "win-x64", "Open16A-LSP.exe")
         : process.platform === "linux"
             ? path.join(extensionPath, "server", "linux-x64", "Open16A-LSP")
             : process.platform === "darwin"
                 ? path.join(extensionPath, "server", "osx-arm64", "Open16A-LSP")
                 : "";
+    const bundledManagedServer = path.join(extensionPath, "server", "Open16A-LSP.dll");
     const candidates = [
         configured,
         process.env.OPEN16A_LSP_PATH,
-        bundledServer,
+        bundledNativeServer,
+        bundledManagedServer,
         ...vscode.workspace.workspaceFolders?.flatMap(folder => [
             path.join(folder.uri.fsPath, "Open16A-LSP.dll"),
             path.join(folder.uri.fsPath, "toolchains", "Open16A-LSP", "bin", "Debug", "net10.0", "Open16A-LSP.dll")

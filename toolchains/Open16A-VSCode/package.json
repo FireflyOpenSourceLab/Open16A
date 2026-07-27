@@ -2,7 +2,7 @@
   "name": "open16a-asm",
   "displayName": "Open16A Assembly",
   "description": "Language support for Open16A assembly.",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "publisher": "open16a",
   "license": "UNLICENSED",
   "engines": {
@@ -58,14 +58,14 @@
         },
         "open16a.stackNavigation.enabled": {
           "type": "boolean",
-          "default": false,
-          "description": "Experimental control-flow-aware PUSH/POP navigation. Disabled by default because large assembly files can make the extension host unresponsive."
+          "default": true,
+          "description": "Control-flow-aware PUSH/POP navigation with asynchronous, bounded stack-balance analysis."
         }
       }
     }
   },
   "scripts": {
-    "build:server": "dotnet publish ..\\Open16A-LSP\\Open16A-LSP.csproj -c Release -r win-x64 -p:PublishAot=true -p:StripSymbols=true -o server",
+    "build:server": "dotnet publish ..\\Open16A-LSP\\Open16A-LSP.csproj -c Release --no-restore -o server",
     "compile": "tsc --noEmit -p . && esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=out/extension.js --sourcemap",
     "watch": "tsc -watch -p .",
     "package": "npm run build:server && npm run compile && vsce package"

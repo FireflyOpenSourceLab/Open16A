@@ -9,4 +9,3 @@ pnpm-lock.yaml
 pnpm-workspace.yaml
 server/**/*.pdb
 server/**/*.xml
-server/Open16A-ASM.*
