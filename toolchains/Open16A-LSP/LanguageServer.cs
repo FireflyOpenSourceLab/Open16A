@@ -245,11 +245,22 @@ public sealed class LanguageServer
 
     private async Task SendAsync(JsonNode value, CancellationToken cancellationToken)
     {
-        byte[] body = Encoding.UTF8.GetBytes(value.ToJsonString());
-        byte[] header = Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n");
-        await output.WriteAsync(header, cancellationToken);
-        await output.WriteAsync(body, cancellationToken);
-        await output.FlushAsync(cancellationToken);
+        try
+        {
+            byte[] body = Encoding.UTF8.GetBytes(value.ToJsonString());
+            byte[] header = Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n");
+            await output.WriteAsync(header, cancellationToken);
+            await output.WriteAsync(body, cancellationToken);
+            await output.FlushAsync(cancellationToken);
+        }
+        catch (IOException)
+        {
+            exitRequested = true;
+        }
+        catch (ObjectDisposedException)
+        {
+            exitRequested = true;
+        }
     }
 
     private async Task<JsonDocument?> ReadMessageAsync(CancellationToken cancellationToken)
