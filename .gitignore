@@ -4,3 +4,17 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 /toolchains/Open16A-BASIC/.build/
+
+# Local working directories and build artifacts
+.verify/
+.verify-*/
+artifacts/
+
+# IDE settings
+.idea/
+*.DotSettings
+
+# Screenshots and runtime binaries
+screenshot*.png
+/open16a-basic.bin
+/toolchains/Open16A-BASIC/open16a-basic.bin
