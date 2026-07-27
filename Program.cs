@@ -60,8 +60,8 @@ const int min_window_width  = 1024;
 const int min_window_height = 768;
 
 Raylib.SetConfigFlags(
-    ConfigFlags.ResizableWindow |
-    ConfigFlags.VSyncHint
+    ConfigFlags.ResizableWindow
+    // ConfigFlags.VSyncHint
 );
 
 Raylib.InitWindow(1024, 768, "The Open16A Simulator");
@@ -95,7 +95,7 @@ try
         previousTimestamp = now;
 
         // 可在这里将超长停顿限制为 100 ms，避免断点恢复后疯狂追帧。
-        elapsedTicks = Math.Min(elapsedTicks, Stopwatch.Frequency / 10);
+        elapsedTicks = Math.Min(elapsedTicks, Stopwatch.Frequency / 60);
 
         UInt128 scaled = (UInt128)elapsedTicks * cpu_hz + cycleRemainder;
         ulong   cycles = (ulong)(scaled / (ulong)Stopwatch.Frequency);
