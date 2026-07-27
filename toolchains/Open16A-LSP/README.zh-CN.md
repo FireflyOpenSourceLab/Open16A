@@ -11,7 +11,7 @@ dotnet toolchains\Open16A-LSP\bin\Debug\net10.0\Open16A-LSP.dll
 
 - `textDocument/publishDiagnostics`：使用实际 `Open16A-ASM` 汇编器报告行级错误。
 - `textDocument/completion`：指令、`.org/.byte/.word` 和 `R0-R7`。
-- `textDocument/hover`：常用指令、寄存器和标签地址说明。
+- `textDocument/hover`：全部 Open16A 指令的英文用法/语义说明，以及寄存器和标签地址说明。
 - `textDocument/definition`：跳至同文件标签定义。
 - `textDocument/documentSymbol`：标签大纲。
 - `didOpen`、全量同步 `didChange`、`didClose`。

@@ -10,19 +10,6 @@ public sealed record LabelInfo(string Name, TextRange Range, int Address);
 
 public sealed class LanguageDocument
 {
-    private static readonly Dictionary<string, string> Documentation = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["LI"] = "`LI Rd, imm16` - Load a 16-bit immediate value.",
-        ["OUT"] = "`OUT port16, Ra` - Write a 16-bit register value to an I/O port.",
-        ["IN"] = "`IN Rd, port16` - Read a 16-bit I/O port value.",
-        ["LD.W"] = "`LD.W Rd, [Ra + disp16]` - Load a big-endian word.",
-        ["ST.W"] = "`ST.W Rd, [Ra + disp16]` - Store a big-endian word.",
-        ["CALLL"] = "`CALLL p20` - Call a 20-bit physical address and save SG and PC.",
-        ["RETL"] = "`RETL` - Restore PC and SG saved by CALLL.",
-        ["JMPL"] = "`JMPL p20` - Jump to a 20-bit physical address.",
-        ["PRESENT"] = "Write `0000h-0002h` to video port `0020h` to submit a frame."
-    };
-
     public static readonly string[] Mnemonics =
     [
         "NOP", "MOV", "LI", "LD.BU", "LD.W", "ST.B", "ST.W", "ADD", "SUB", "AND", "OR", "XOR", "SHL", "SHR", "SAR",
@@ -32,6 +19,11 @@ public sealed class LanguageDocument
         , "FLI", "FMOV", "FLD", "FST", "FADD", "FSUB", "FMUL", "FDIV", "FNEG", "FABS", "FCMP"
         , "IFPLI", "IFPADD", "IFPSUB", "IFPAND", "IFPOR", "IFPXOR", "IFPNOT", "IFPSHL", "IFPSHR", "IFPSAR", "IFPROL", "IFPROR"
     ];
+
+    private static readonly IReadOnlyDictionary<string, string> Documentation = Mnemonics.ToDictionary(
+        mnemonic => mnemonic,
+        DescribeInstruction,
+        StringComparer.OrdinalIgnoreCase);
 
     public LanguageDocument(string uri, string text)
     {
@@ -77,8 +69,8 @@ public sealed class LanguageDocument
     {
         if (Documentation.TryGetValue(token, out string? description))
             return description;
-        if (Mnemonics.Contains(token, StringComparer.OrdinalIgnoreCase))
-            return $"`{token.ToUpperInvariant()}` Open16A instruction.";
+        if (string.Equals(token, "PRESENT", StringComparison.OrdinalIgnoreCase))
+            return "`PRESENT` - Write `0000h-0002h` to video port `0020h` to submit a frame.";
         if (token.Length == 2 && token[0] is 'R' or 'r' && token[1] is >= '0' and <= '7')
             return $"`{token.ToUpperInvariant()}` - 16-bit general-purpose register.";
         if (token.Length == 3 && token[0] is 'F' or 'f' && token[1] is 'P' or 'p' && token[2] is >= '0' and <= '7')
@@ -155,6 +147,90 @@ public sealed class LanguageDocument
             _ => string.IsNullOrEmpty(mnemonic) ? 0 : 2
         };
     }
+
+    private static string DescribeInstruction(string mnemonic) => mnemonic switch
+    {
+        "NOP" => "`NOP` - Do nothing and continue with the next instruction.",
+        "MOV" => "`MOV Rd, Ra` - Copy the 16-bit value in `Ra` to `Rd`.",
+        "LI" => "`LI Rd, imm16` - Load a 16-bit immediate value.",
+        "LD.BU" => "`LD.BU Rd, [Ra + disp16]` - Load a byte from logical memory and zero-extend it to `Rd`.",
+        "LD.W" => "`LD.W Rd, [Ra + disp16]` - Load a 16-bit big-endian word from logical memory.",
+        "ST.B" => "`ST.B Rs, [Ra + disp16]` - Store the low byte of `Rs` to logical memory.",
+        "ST.W" => "`ST.W Rs, [Ra + disp16]` - Store a 16-bit big-endian word to logical memory.",
+        "ADD" => "`ADD Rd, Ra, Rb` - Add two 16-bit values; the low 16 bits are written to `Rd`.",
+        "SUB" => "`SUB Rd, Ra, Rb` - Subtract `Rb` from `Ra`; the low 16 bits are written to `Rd`.",
+        "AND" => "`AND Rd, Ra, Rb` - Bitwise AND two 16-bit values.",
+        "OR" => "`OR Rd, Ra, Rb` - Bitwise OR two 16-bit values.",
+        "XOR" => "`XOR Rd, Ra, Rb` - Bitwise exclusive OR two 16-bit values.",
+        "SHL" => "`SHL Rd, Ra, Rb` - Shift `Ra` left by `Rb & 0Fh` bits.",
+        "SHR" => "`SHR Rd, Ra, Rb` - Logically shift `Ra` right by `Rb & 0Fh` bits.",
+        "SAR" => "`SAR Rd, Ra, Rb` - Arithmetically shift signed `Ra` right by `Rb & 0Fh` bits.",
+        "BEQ" => "`BEQ Ra, Rb, rel16` - Branch when `Ra` equals `Rb`.",
+        "BNE" => "`BNE Ra, Rb, rel16` - Branch when `Ra` does not equal `Rb`.",
+        "JMP" => "`JMP Ra` - Jump to the logical address in `Ra` without changing `SG`.",
+        "CALL" => "`CALL Ra` - Push the return PC, then call the logical address in `Ra`.",
+        "RET" => "`RET` - Pop the return PC saved by `CALL` or `CALLA`.",
+        "PUSH" => "`PUSH Ra` - Push a 16-bit register value onto the physical stack.",
+        "POP" => "`POP Rd` - Pop a 16-bit value from the physical stack into `Rd`.",
+        "IN" => "`IN Rd, port16` - Read a 16-bit value from an I/O port; unmapped ports read as zero.",
+        "OUT" => "`OUT port16, Ra` - Write a 16-bit register value to an I/O port.",
+        "RDSG" => "`RDSG Rd` - Read the current segment register into `Rd` with zero extension.",
+        "WRSG" => "`WRSG Ra` - Set `SG` to `Ra & 003Fh`.",
+        "WSGI" => "`WSGI imm16` - Set `SG` to `imm16 & 003Fh`.",
+        "EI" => "`EI` - Enable maskable interrupts by setting `SR.IE`.",
+        "DI" => "`DI` - Disable maskable interrupts by clearing `SR.IE`.",
+        "HALT" => "`HALT` - Stop fetching instructions until an acceptable interrupt arrives.",
+        "IRET" => "`IRET` - Restore the interrupt frame: `SG`, `SR`, then `PC`.",
+        "BLT" => "`BLT Ra, Rb, rel16` - Branch when signed `Ra` is less than signed `Rb`.",
+        "BGE" => "`BGE Ra, Rb, rel16` - Branch when signed `Ra` is greater than or equal to signed `Rb`.",
+        "BLO" => "`BLO Ra, Rb, rel16` - Branch when unsigned `Ra` is below unsigned `Rb`.",
+        "BHS" => "`BHS Ra, Rb, rel16` - Branch when unsigned `Ra` is higher than or equal to unsigned `Rb`.",
+        "BLE" => "`BLE Ra, Rb, rel16` - Branch when signed `Ra` is less than or equal to signed `Rb`.",
+        "BGT" => "`BGT Ra, Rb, rel16` - Branch when signed `Ra` is greater than signed `Rb`.",
+        "JMPA" => "`JMPA addr16` - Jump to a logical absolute address without changing `SG`.",
+        "CALLA" => "`CALLA addr16` - Push the return PC, then call a logical absolute address.",
+        "JMPL" => "`JMPL p20` - Jump to a 20-bit physical address and derive `SG` and `PC` from it.",
+        "CALLL" => "`CALLL p20` - Call a 20-bit physical address, saving `SG` and the return PC.",
+        "RETL" => "`RETL` - Restore the PC and SG saved by `CALLL`.",
+        "LDBS" => "`LDBS Rd, [p20]` - Load a byte from physical memory and sign-extend it to `Rd`.",
+        "LDBU" => "`LDBU Rd, [p20]` - Load a byte from physical memory and zero-extend it to `Rd`.",
+        "LDW" => "`LDW Rd, [p20]` - Load a 16-bit big-endian word from physical memory.",
+        "LSTB" => "`LSTB Rs, [p20]` - Store the low byte of `Rs` to physical memory.",
+        "LSTW" => "`LSTW Rs, [p20]` - Store a 16-bit big-endian word to physical memory.",
+        "MUL" => "`MUL Rd, Ra, Rb` - Signed multiply; write the low 16 bits to `Rd`.",
+        "DIV" => "`DIV Rd, Ra, Rb` - Signed division with truncation toward zero; division by zero faults.",
+        "DIVU" => "`DIVU Rd, Ra, Rb` - Unsigned division; division by zero faults.",
+        "MOD" => "`MOD Rd, Ra, Rb` - Signed remainder; division by zero faults.",
+        "MODU" => "`MODU Rd, Ra, Rb` - Unsigned remainder; division by zero faults.",
+        "NEG" => "`NEG Rd, Ra` - Two's-complement negate `Ra`.",
+        "NOT" => "`NOT Rd, Ra` - Bitwise complement `Ra`.",
+        "ROL" => "`ROL Rd, Ra, Rb` - Rotate `Ra` left by `Rb & 0Fh` bits.",
+        "ROR" => "`ROR Rd, Ra, Rb` - Rotate `Ra` right by `Rb & 0Fh` bits.",
+        "FLI" => "`FLI FPd, f32` - Load an IEEE-754 single-precision literal into `FPd`.",
+        "FMOV" => "`FMOV FPd, FPa` - Copy the raw 32-bit value of a floating-point register.",
+        "FLD" => "`FLD FPd, [Ra + disp16]` - Load a 32-bit big-endian value from logical memory.",
+        "FST" => "`FST FPs, [Ra + disp16]` - Store a 32-bit big-endian value to logical memory.",
+        "FADD" => "`FADD FPd, FPa, FPb` - IEEE-754 single-precision addition.",
+        "FSUB" => "`FSUB FPd, FPa, FPb` - IEEE-754 single-precision subtraction.",
+        "FMUL" => "`FMUL FPd, FPa, FPb` - IEEE-754 single-precision multiplication.",
+        "FDIV" => "`FDIV FPd, FPa, FPb` - IEEE-754 single-precision division.",
+        "FNEG" => "`FNEG FPd, FPa` - Negate a single-precision floating-point value.",
+        "FABS" => "`FABS FPd, FPa` - Clear the sign bit of a floating-point value.",
+        "FCMP" => "`FCMP Rd, FPa, FPb` - Compare floats and write the Open16A comparison code to `Rd`.",
+        "IFPLI" => "`IFPLI FPd, imm32` - Load a raw 32-bit integer-overlay immediate into `FPd`.",
+        "IFPADD" => "`IFPADD FPd, FPa, FPb` - Add raw 32-bit integer-overlay values.",
+        "IFPSUB" => "`IFPSUB FPd, FPa, FPb` - Subtract raw 32-bit integer-overlay values.",
+        "IFPAND" => "`IFPAND FPd, FPa, FPb` - Bitwise AND raw 32-bit integer-overlay values.",
+        "IFPOR" => "`IFPOR FPd, FPa, FPb` - Bitwise OR raw 32-bit integer-overlay values.",
+        "IFPXOR" => "`IFPXOR FPd, FPa, FPb` - Bitwise XOR raw 32-bit integer-overlay values.",
+        "IFPNOT" => "`IFPNOT FPd, FPa` - Bitwise complement a raw 32-bit integer-overlay value.",
+        "IFPSHL" => "`IFPSHL FPd, FPa, FPb` - Shift left by `FPb & 1Fh` bits in the integer-overlay layer.",
+        "IFPSHR" => "`IFPSHR FPd, FPa, FPb` - Logically shift right by `FPb & 1Fh` bits in the integer-overlay layer.",
+        "IFPSAR" => "`IFPSAR FPd, FPa, FPb` - Arithmetically shift right by `FPb & 1Fh` bits in the integer-overlay layer.",
+        "IFPROL" => "`IFPROL FPd, FPa, FPb` - Rotate left by `FPb & 1Fh` bits in the integer-overlay layer.",
+        "IFPROR" => "`IFPROR FPd, FPa, FPb` - Rotate right by `FPb & 1Fh` bits in the integer-overlay layer.",
+        _ => throw new ArgumentOutOfRangeException(nameof(mnemonic), mnemonic, "Unknown Open16A instruction.")
+    };
 
     private static bool TryParseOrigin(string body, out int origin)
     {

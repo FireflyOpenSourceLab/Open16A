@@ -34,4 +34,17 @@ public sealed class LanguageDocumentTests
         Assert.Contains("I/O port", document.Hover("OUT"));
         Assert.Contains("general-purpose", document.Hover("R0"));
     }
+
+    [Fact]
+    public void EveryInstructionHasSpecificEnglishHoverDocumentation()
+    {
+        var document = new LanguageDocument("file:///code.o16a", "NOP\n");
+
+        foreach (string mnemonic in LanguageDocument.Mnemonics)
+        {
+            string documentation = Assert.IsType<string>(document.Hover(mnemonic));
+            Assert.Contains(mnemonic, documentation, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Open16A instruction.", documentation, StringComparison.Ordinal);
+        }
+    }
 }
