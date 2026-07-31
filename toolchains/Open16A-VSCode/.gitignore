@@ -1,6 +1,4 @@
 node_modules/
 out/
 *.vsix
-pnpm-lock.yaml
-pnpm-workspace.yaml
 server/

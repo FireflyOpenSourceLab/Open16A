@@ -5,6 +5,14 @@ riderModule.iml
 /_ReSharper.Caches/
 /toolchains/Open16A-BASIC/.build/
 
+# Visual Studio user state
+.vs/
+*.user
+*.userprefs
+
+# Test results
+TestResults/
+
 # Local working directories and build artifacts
 .verify/
 .verify-*/
@@ -18,3 +26,7 @@ artifacts/
 screenshot*.png
 /open16a-basic.bin
 /toolchains/Open16A-BASIC/open16a-basic.bin
+
+# Local agent working directories
+.agents/
+.codex/
