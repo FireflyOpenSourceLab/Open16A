@@ -4,7 +4,7 @@
   "description": "Language support for Open16A assembly.",
   "version": "0.1.2",
   "publisher": "open16a",
-  "license": "UNLICENSED",
+  "license": "GPL-3.0",
   "engines": {
     "vscode": "^1.95.0"
   },
