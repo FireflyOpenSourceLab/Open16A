@@ -3099,15 +3099,13 @@ disk_write_sector:
     wrsg r7
     li r0, 2
     calla disk_submit
-    li r5, disk_status
-    st.w r0, [r5]
+    st.w r0, [r4 + disk_status - disk_block]
     pop r7
     pop r5
     pop r2
     pop r1
     pop r0
-    li r5, disk_status
-    ld.w r0, [r5]
+    ld.w r0, [r4 + disk_status - disk_block]
     ret
 
 ; Reads R2 bytes (<=512) from disk LBA R1 into logical R0. Returns status.
@@ -3117,15 +3115,13 @@ disk_read_sector:
     push r2
     push r5
     push r7
-    li r5, disk_dst
-    st.w r0, [r5]
+    st.w r0, [r4 + disk_dst - disk_block]
     li r7, 0
     lstw r7, [0f0002h]
     lstw r1, [0f0004h]
     li r0, 1
     calla disk_submit
-    li r5, disk_status
-    st.w r0, [r5]
+    st.w r0, [r4 + disk_status - disk_block]
     li r5, 0
     bne r0, r5, disk_read_done
     rdsg r7
@@ -3133,8 +3129,7 @@ disk_read_sector:
     wsgi 003ch
     li r5, 0c010h
     mov r0, r5
-    li r5, disk_dst
-    ld.w r1, [r5]
+    ld.w r1, [r4 + disk_dst - disk_block]
     calla disk_copy
     pop r7
     wrsg r7
@@ -3144,8 +3139,7 @@ disk_read_done:
     pop r2
     pop r1
     pop r0
-    li r5, disk_status
-    ld.w r0, [r5]
+    ld.w r0, [r4 + disk_status - disk_block]
     ret
 
 save_program:
@@ -3172,44 +3166,36 @@ save_program:
     ld.w r0, [r1]
     li r2, 10
     add r0, r0, r2
-    li r1, disk_remaining
-    st.w r0, [r1]
-    li r1, disk_lba
+    li r4, disk_block
+    st.w r0, [r4 + disk_remaining - disk_block]
     li r0, 0
-    st.w r0, [r1]
-    li r1, disk_src
+    st.w r0, [r4 + disk_lba - disk_block]
     li r0, 4000h
-    st.w r0, [r1]
+    st.w r0, [r4 + disk_src - disk_block]
 save_sector:
-    li r1, disk_remaining
-    ld.w r3, [r1]
-    li r4, 0
-    beq r3, r4, save_done
-    li r4, 512
-    bhs r3, r4, save_sector_count_ready
-    mov r4, r3
-save_sector_count_ready:
-    li r1, disk_src
-    ld.w r0, [r1]
-    li r1, disk_lba
-    ld.w r1, [r1]
-    mov r2, r4
-    calla disk_write_sector
+    ld.w r3, [r4 + disk_remaining - disk_block]
     li r5, 0
-    bne r0, r5, disk_error
-    li r5, disk_src
-    ld.w r0, [r5]
-    add r0, r0, r4
-    st.w r0, [r5]
-    li r5, disk_lba
-    ld.w r0, [r5]
+    beq r3, r5, save_done
+    li r5, 512
+    bhs r3, r5, save_sector_count_ready
+    mov r5, r3
+save_sector_count_ready:
+    ld.w r0, [r4 + disk_src - disk_block]
+    ld.w r1, [r4 + disk_lba - disk_block]
+    mov r2, r5
+    calla disk_write_sector
+    li r6, 0
+    bne r0, r6, disk_error
+    ld.w r0, [r4 + disk_src - disk_block]
+    add r0, r0, r5
+    st.w r0, [r4 + disk_src - disk_block]
+    ld.w r0, [r4 + disk_lba - disk_block]
     li r6, 1
     add r0, r0, r6
-    st.w r0, [r5]
-    li r5, disk_remaining
-    ld.w r0, [r5]
-    sub r0, r0, r4
-    st.w r0, [r5]
+    st.w r0, [r4 + disk_lba - disk_block]
+    ld.w r0, [r4 + disk_remaining - disk_block]
+    sub r0, r0, r5
+    st.w r0, [r4 + disk_remaining - disk_block]
     jmpa save_sector
 save_done:
     ret
@@ -3257,46 +3243,38 @@ load_program:
     li r2, 512
     bhs r2, r0, load_done
     sub r0, r0, r2
-    li r1, disk_remaining
-    st.w r0, [r1]
-    li r1, disk_lba
+    li r4, disk_block
+    st.w r0, [r4 + disk_remaining - disk_block]
     li r0, 1
-    st.w r0, [r1]
-    li r1, disk_dst
+    st.w r0, [r4 + disk_lba - disk_block]
     li r0, 4000h
     li r2, 512
     add r0, r0, r2
-    st.w r0, [r1]
+    st.w r0, [r4 + disk_dst - disk_block]
 load_sector:
-    li r1, disk_remaining
-    ld.w r3, [r1]
-    li r4, 0
-    beq r3, r4, load_done
-    li r4, 512
-    bhs r3, r4, load_sector_count_ready
-    mov r4, r3
-load_sector_count_ready:
-    li r1, disk_dst
-    ld.w r0, [r1]
-    li r1, disk_lba
-    ld.w r1, [r1]
-    mov r2, r4
-    calla disk_read_sector
+    ld.w r3, [r4 + disk_remaining - disk_block]
     li r5, 0
-    bne r0, r5, disk_error
-    li r5, disk_dst
-    ld.w r0, [r5]
-    add r0, r0, r4
-    st.w r0, [r5]
-    li r5, disk_lba
-    ld.w r0, [r5]
+    beq r3, r5, load_done
+    li r5, 512
+    bhs r3, r5, load_sector_count_ready
+    mov r5, r3
+load_sector_count_ready:
+    ld.w r0, [r4 + disk_dst - disk_block]
+    ld.w r1, [r4 + disk_lba - disk_block]
+    mov r2, r5
+    calla disk_read_sector
+    li r6, 0
+    bne r0, r6, disk_error
+    ld.w r0, [r4 + disk_dst - disk_block]
+    add r0, r0, r5
+    st.w r0, [r4 + disk_dst - disk_block]
+    ld.w r0, [r4 + disk_lba - disk_block]
     li r6, 1
     add r0, r0, r6
-    st.w r0, [r5]
-    li r5, disk_remaining
-    ld.w r0, [r5]
-    sub r0, r0, r4
-    st.w r0, [r5]
+    st.w r0, [r4 + disk_lba - disk_block]
+    ld.w r0, [r4 + disk_remaining - disk_block]
+    sub r0, r0, r5
+    st.w r0, [r4 + disk_remaining - disk_block]
     jmpa load_sector
 load_done:
     ret
@@ -3326,6 +3304,7 @@ disk_error_text:
     .byte '?','D','I','S','K',' ','E','R','R','O','R',10,0
 no_saved_program_text:
     .byte '?','N','O',' ','S','A','V','E','D',' ','P','R','O','G','R','A','M',10,0
+disk_block:
 disk_remaining:
     .word 0
 disk_src:
