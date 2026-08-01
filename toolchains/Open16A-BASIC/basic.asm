@@ -25,6 +25,9 @@ entry_clear_numeric_variables:
     st.w r0, [r1]
     li r1, 0030h
     st.w r0, [r1]
+    li r0, expansion_interrupt
+    li r1, 0034h
+    st.w r0, [r1]
     ei
     li r1, banner_text
     calla puts
@@ -191,7 +194,7 @@ direct_list:
     ret
 direct_cont:
     li r3, 00b9h
-    bne r0, r3, direct_error
+    bne r0, r3, direct_save
     bne r2, r3, direct_error
     li r3, continuation_valid
     ld.bu r5, [r3]
@@ -206,6 +209,16 @@ direct_cont:
     li r4, continuation_line_end
     ld.w r4, [r4]
     jmpa run_token
+direct_save:
+    li r3, 00c4h
+    bne r0, r3, direct_load
+    calla save_program
+    ret
+direct_load:
+    li r3, 00c5h
+    bne r0, r3, direct_error
+    calla load_program
+    ret
 direct_error:
     li r1, syntax_text
     calla puts
@@ -2972,6 +2985,329 @@ keyboard_check_c:
 keyboard_check_done:
     ret
 
+; ---------------------------------------------------------------------------
+; Disk SAVE/LOAD. Talks to the open16a.disk card in expansion slot 0 (port
+; 40h, mailbox physical F0000h). The B16P program store at 4000h is saved
+; verbatim starting at LBA 0, so a valid on-disk image carries the "B16P"
+; header. Direct-only commands; a disk read errors keep the machine alive.
+; ---------------------------------------------------------------------------
+expansion_interrupt:
+    iret
+
+; Returns R0=0 when slot 0 holds a working disk card, else R0=1.
+disk_identify:
+    push r1
+    push r2
+    in r0, 0040h
+    li r1, 1
+    and r0, r0, r1
+    li r1, 1
+    beq r0, r1, disk_identify_present
+    li r0, 1
+    jmpa disk_identify_exit
+disk_identify_present:
+    li r0, 0
+    calla disk_submit
+    li r1, 0
+    bne r0, r1, disk_identify_exit
+    ldw r1, [0f0002h]
+    li r2, 4f44h
+    bne r1, r2, disk_identify_fail
+    ldw r1, [0f0004h]
+    li r2, 534bh
+    bne r1, r2, disk_identify_fail
+    ldw r1, [0f0008h]
+    li r2, 0200h
+    bne r1, r2, disk_identify_fail
+    li r0, 0
+    jmpa disk_identify_exit
+disk_identify_fail:
+    li r0, 1
+disk_identify_exit:
+    pop r2
+    pop r1
+    ret
+
+; Submits command R0 to slot 0 and waits for completion. Returns the
+; mailbox status word in R0.
+disk_submit:
+    push r0
+    out 0040h, r0
+    pop r0
+    jmpa disk_wait
+
+disk_wait:
+    push r1
+    push r2
+disk_wait_poll:
+    in r1, 0048h
+    li r2, 1
+    and r1, r1, r2
+    beq r1, r2, disk_wait_complete
+    jmpa disk_wait_poll
+disk_wait_complete:
+    li r1, 1
+    out 0048h, r1
+    ldw r0, [0f0000h]
+    pop r2
+    pop r1
+    ret
+
+; Copies R2 bytes from logical R0 to logical R1. The caller must have set
+; SG so that C000h-window addresses hit the slot 0 mailbox. SG untouched.
+disk_copy:
+    push r3
+disk_copy_loop:
+    li r3, 0
+    beq r2, r3, disk_copy_done
+    ld.bu r3, [r0]
+    st.b r3, [r1]
+    li r3, 1
+    add r0, r0, r3
+    add r1, r1, r3
+    sub r2, r2, r3
+    jmpa disk_copy_loop
+disk_copy_done:
+    pop r3
+    ret
+
+; Writes R2 bytes (<=512) from logical R0 to disk LBA R1. Returns status in R0.
+disk_write_sector:
+    push r0
+    push r1
+    push r2
+    push r5
+    push r7
+    rdsg r7
+    push r7
+    wsgi 003ch
+    li r5, 0c005h
+    st.b r1, [r5]
+    li r7, 8
+    shr r1, r1, r7
+    li r5, 0c004h
+    st.b r1, [r5]
+    li r5, 0c002h
+    li r7, 0
+    st.b r7, [r5]
+    li r5, 0c003h
+    st.b r7, [r5]
+    li r5, 0c010h
+    mov r1, r5
+    calla disk_copy
+    pop r7
+    wrsg r7
+    li r0, 2
+    calla disk_submit
+    li r5, disk_status
+    st.w r0, [r5]
+    pop r7
+    pop r5
+    pop r2
+    pop r1
+    pop r0
+    li r5, disk_status
+    ld.w r0, [r5]
+    ret
+
+; Reads R2 bytes (<=512) from disk LBA R1 into logical R0. Returns status.
+disk_read_sector:
+    push r0
+    push r1
+    push r2
+    push r5
+    push r7
+    li r5, disk_dst
+    st.w r0, [r5]
+    li r7, 0
+    lstw r7, [0f0002h]
+    lstw r1, [0f0004h]
+    li r0, 1
+    calla disk_submit
+    li r5, disk_status
+    st.w r0, [r5]
+    li r5, 0
+    bne r0, r5, disk_read_done
+    rdsg r7
+    push r7
+    wsgi 003ch
+    li r5, 0c010h
+    mov r0, r5
+    li r5, disk_dst
+    ld.w r1, [r5]
+    calla disk_copy
+    pop r7
+    wrsg r7
+disk_read_done:
+    pop r7
+    pop r5
+    pop r2
+    pop r1
+    pop r0
+    li r5, disk_status
+    ld.w r0, [r5]
+    ret
+
+save_program:
+    li r1, 4000h
+    ld.bu r0, [r1]
+    li r2, 0042h
+    bne r0, r2, save_no_program
+    li r1, 4001h
+    ld.bu r0, [r1]
+    li r2, 0031h
+    bne r0, r2, save_no_program
+    li r1, 4002h
+    ld.bu r0, [r1]
+    li r2, 0036h
+    bne r0, r2, save_no_program
+    li r1, 4003h
+    ld.bu r0, [r1]
+    li r2, 0050h
+    bne r0, r2, save_no_program
+    calla disk_identify
+    li r2, 0
+    bne r0, r2, disk_error
+    li r1, 4006h
+    ld.w r0, [r1]
+    li r2, 10
+    add r0, r0, r2
+    li r1, disk_remaining
+    st.w r0, [r1]
+    li r1, disk_lba
+    li r0, 0
+    st.w r0, [r1]
+    li r1, disk_src
+    li r0, 4000h
+    st.w r0, [r1]
+save_sector:
+    li r1, disk_remaining
+    ld.w r3, [r1]
+    li r4, 0
+    beq r3, r4, save_done
+    li r4, 512
+    bhs r3, r4, save_sector_count_ready
+    mov r4, r3
+save_sector_count_ready:
+    li r1, disk_src
+    ld.w r0, [r1]
+    li r1, disk_lba
+    ld.w r1, [r1]
+    mov r2, r4
+    calla disk_write_sector
+    li r5, 0
+    bne r0, r5, disk_error
+    li r5, disk_src
+    ld.w r0, [r5]
+    add r0, r0, r4
+    st.w r0, [r5]
+    li r5, disk_lba
+    ld.w r0, [r5]
+    li r6, 1
+    add r0, r0, r6
+    st.w r0, [r5]
+    li r5, disk_remaining
+    ld.w r0, [r5]
+    sub r0, r0, r4
+    st.w r0, [r5]
+    jmpa save_sector
+save_done:
+    ret
+save_no_program:
+    li r1, no_program_text
+    calla puts
+    ret
+disk_error:
+    li r1, disk_error_text
+    calla puts
+    ret
+
+load_program:
+    calla disk_identify
+    li r2, 0
+    bne r0, r2, disk_error
+    li r0, 4000h
+    li r1, 0
+    li r2, 512
+    calla disk_read_sector
+    li r5, 0
+    bne r0, r5, disk_error
+    li r1, 4000h
+    ld.bu r0, [r1]
+    li r2, 0042h
+    bne r0, r2, load_invalid
+    li r1, 4001h
+    ld.bu r0, [r1]
+    li r2, 0031h
+    bne r0, r2, load_invalid
+    li r1, 4002h
+    ld.bu r0, [r1]
+    li r2, 0036h
+    bne r0, r2, load_invalid
+    li r1, 4003h
+    ld.bu r0, [r1]
+    li r2, 0050h
+    bne r0, r2, load_invalid
+    li r1, 4006h
+    ld.w r0, [r1]
+    li r2, 02ff7h
+    bhs r0, r2, load_invalid
+    li r2, 10
+    add r0, r0, r2
+    li r2, 512
+    bhs r2, r0, load_done
+    sub r0, r0, r2
+    li r1, disk_remaining
+    st.w r0, [r1]
+    li r1, disk_lba
+    li r0, 1
+    st.w r0, [r1]
+    li r1, disk_dst
+    li r0, 4000h
+    li r2, 512
+    add r0, r0, r2
+    st.w r0, [r1]
+load_sector:
+    li r1, disk_remaining
+    ld.w r3, [r1]
+    li r4, 0
+    beq r3, r4, load_done
+    li r4, 512
+    bhs r3, r4, load_sector_count_ready
+    mov r4, r3
+load_sector_count_ready:
+    li r1, disk_dst
+    ld.w r0, [r1]
+    li r1, disk_lba
+    ld.w r1, [r1]
+    mov r2, r4
+    calla disk_read_sector
+    li r5, 0
+    bne r0, r5, disk_error
+    li r5, disk_dst
+    ld.w r0, [r5]
+    add r0, r0, r4
+    st.w r0, [r5]
+    li r5, disk_lba
+    ld.w r0, [r5]
+    li r6, 1
+    add r0, r0, r6
+    st.w r0, [r5]
+    li r5, disk_remaining
+    ld.w r0, [r5]
+    sub r0, r0, r4
+    st.w r0, [r5]
+    jmpa load_sector
+load_done:
+    ret
+load_invalid:
+    li r1, 4000h
+    li r0, 0
+    st.b r0, [r1]
+    li r1, no_saved_program_text
+    calla puts
+    ret
+
 banner_text:
     .byte 'O','P','E','N','1','6','A',' ','B','A','S','I','C',' ','1','.','1',10,0
 ready_text:
@@ -2986,6 +3322,20 @@ no_program_text:
     .byte '?','N','O',' ','P','R','O','G','R','A','M',10,0
 program_full_text:
     .byte '?','P','R','O','G','R','A','M',' ','F','U','L','L',10,0
+disk_error_text:
+    .byte '?','D','I','S','K',' ','E','R','R','O','R',10,0
+no_saved_program_text:
+    .byte '?','N','O',' ','S','A','V','E','D',' ','P','R','O','G','R','A','M',10,0
+disk_remaining:
+    .word 0
+disk_src:
+    .word 0
+disk_lba:
+    .word 0
+disk_dst:
+    .word 0
+disk_status:
+    .word 0
 record_token_length:
     .word 0
 record_string_source:
@@ -3155,7 +3505,8 @@ token_keyword_table:
     .byte 0bch,6,'p','r','e','s','e','t', 0bdh,4,'l','i','n','e'
     .byte 0beh,6,'c','i','r','c','l','e', 0bfh,7,'p','a','l','e','t','t','e'
     .byte 0c0h,7,'p','r','e','s','e','n','t', 0c1h,3,'o','u','t'
-    .byte 0c2h,3,'i','n','p', 0c3h,5,'p','o','i','n','t', 0
+    .byte 0c2h,3,'i','n','p', 0c3h,5,'p','o','i','n','t'
+    .byte 0c4h,4,'s','a','v','e', 0c5h,4,'l','o','a','d', 0
 ; scan 00h-3Eh, unshifted then shifted. Zero denotes a non-text key.
 key_lower:
     .byte '`','1','2','3','4','5','6','7','8','9','0','-','=',0,0,0

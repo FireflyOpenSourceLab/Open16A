@@ -21,8 +21,8 @@ token 缓冲为 `73C0h-743Fh`，数值变量为 `7440h-74A7h`，GOSUB/FOR 栈为
 
 REPL 与 PACK 使用同一套大小写不敏感 tokenizer。输入带行号的任意支持语句会按
 行号插入或替换；只输入行号会删除该行。编辑后立即接受下一行，不重复输出
-`READY.`。直接命令为 `RUN`、`LIST`、`NEW`、`CONT` 和 `CLS`；`LIST` 从 token
-流完整反解关键字、变量、整数、字符串和运算符。
+`READY.`。直接命令为 `RUN`、`LIST`、`NEW`、`CONT`、`CLS`、`SAVE` 和 `LOAD`；
+`LIST` 从 token 流完整反解关键字、变量、整数、字符串和运算符。
 
 支持的语句和函数：
 
@@ -66,8 +66,18 @@ REPL 与 PACK 使用同一套大小写不敏感 tokenizer。输入带行号的�
 程序结束、`READY.` 和键盘等待都会继续提交当前 `SCREEN` 模式，不会切回模式 0。
 模式 2 本身不受字符卡支持，因此该模式下 REPL 仍接收输入，但文本提示不可见。
 
-本子集仍不包含 FP32 BASIC 算术、字符串数组、磁盘/文件命令或 GW-BASIC
+本子集仍不包含 FP32 BASIC 算术、字符串数组或 GW-BASIC
 硬件扩展。`PEEK/POKE` 使用当前 `SG` 的逻辑地址，`POKE` 写入低 8 bit。
+
+## 磁盘 SAVE/LOAD
+
+`SAVE` 与 `LOAD` 是直接命令，通过扩展槽 0 的 `open16a.disk` 磁盘卡把
+`4000h` 的 B16P 程序原样存到镜像的 LBA 0 起连续扇区。`SAVE` 需要程序区已
+有 B16P 程序；`LOAD` 把镜像读回程序区并校验 `B16P` 头，程序区为空时报
+`?NO SAVED PROGRAM`。槽 0 未安装磁盘卡、IDENTIFY 校验失败或读写出错时打印
+`?DISK ERROR` 并回到 `READY.`；`SAVE` 在无程序时打印 `?NO PROGRAM`。程序
+区容量上限为 `3000h` 字节，镜像磁盘需按 512 字节扇区对齐。设备卡协议见
+[扩展卡插件开发手册](../../docs/EXPANSION_PLUGINS.zh-CN.md#8-磁盘镜像卡)。
 
 单独构建默认解释器，不带预置程序：
 

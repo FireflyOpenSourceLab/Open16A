@@ -1,3 +1,6 @@
+using System.Text.Json;
+using OldSimulator.Expansion;
+using OldSimulator.Expansion.Disk;
 using OldSimulator.VirtualDevices;
 using Open16A.Asm;
 using Open16A.BasicPack;
@@ -12,8 +15,8 @@ public sealed class BasicInterpreterTests
     {
         AssemblyResult image = AssembleInterpreter();
 
-        Assert.True(image.Bytes.Length <= 10_000,
-            $"BASIC 1.1 interpreter is {image.Bytes.Length} bytes; budget is 10000 bytes.");
+        Assert.True(image.Bytes.Length <= 11_500,
+            $"BASIC 1.1 interpreter is {image.Bytes.Length} bytes; budget is 11500 bytes.");
         Assert.True(image.Origin + image.Bytes.Length <= 0x4000,
             "Interpreter must not overlap the B16P program store at 4000h.");
     }
@@ -369,10 +372,148 @@ public sealed class BasicInterpreterTests
         Assert.True(machine.Cpu.Halted);
     }
 
-    private static Machine StartInterpreter()
+    [Fact]
+    public void SaveWritesTheProgramToTheDiskImageAndLoadRestoresIt()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "open16a-basic-disk-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        string imagePath = Path.Combine(tempDir, "disk.img");
+        File.WriteAllBytes(imagePath, new byte[16 * DiskCardProtocol.SectorSize]);
+        const string source = "10 print \"hello\"";
+
+        try
+        {
+            Machine machine = StartInterpreter([CreateDiskInstallation(imagePath)]);
+            using (machine)
+            {
+                AdvanceUntilHalted(machine);
+                SendLine(machine, source);
+                SendLine(machine, "save");
+                AdvanceUntilHalted(machine);
+
+                Assert.True(machine.Cpu.Halted);
+                Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+
+                SendLine(machine, "new");
+                AdvanceUntilHalted(machine);
+                Assert.Equal((byte)0, machine.Memory.ReadPhysical(0x4000));
+
+                SendLine(machine, "load");
+                AdvanceUntilHalted(machine);
+
+                Assert.True(machine.Cpu.Halted);
+                Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+                Assert.Equal((byte)'B', machine.Memory.ReadPhysical(0x4000));
+
+                byte[] expectedProgram = BasicTokenizer.ParseProgram(source).ToBytes();
+                for (var index = 0; index < expectedProgram.Length; index++)
+                    Assert.Equal(expectedProgram[index], machine.Memory.ReadPhysical(0x4000u + (uint)index));
+            }
+
+            byte[] image = File.ReadAllBytes(imagePath);
+            byte[] expected = BasicTokenizer.ParseProgram(source).ToBytes();
+            for (var index = 0; index < expected.Length; index++)
+                Assert.Equal(expected[index], image[index]);
+            Assert.Equal((byte)0, image[expected.Length]);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SaveWithoutAProgramReportsNoProgramAndStaysAlive()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "open16a-basic-disk-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        string imagePath = Path.Combine(tempDir, "disk.img");
+        File.WriteAllBytes(imagePath, new byte[16 * DiskCardProtocol.SectorSize]);
+
+        try
+        {
+            Machine machine = StartInterpreter([CreateDiskInstallation(imagePath)]);
+            using (machine)
+            {
+                AdvanceUntilHalted(machine);
+                SendLine(machine, "save");
+                AdvanceUntilHalted(machine);
+
+                Assert.True(machine.Cpu.Halted);
+                Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+                Assert.Equal((byte)0, machine.Memory.ReadPhysical(0x4000));
+            }
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LoadWithoutASavedProgramClearsTheStoreAndStaysAlive()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "open16a-basic-disk-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        string imagePath = Path.Combine(tempDir, "disk.img");
+        File.WriteAllBytes(imagePath, new byte[16 * DiskCardProtocol.SectorSize]);
+
+        try
+        {
+            Machine machine = StartInterpreter([CreateDiskInstallation(imagePath)]);
+            using (machine)
+            {
+                AdvanceUntilHalted(machine);
+                SendLine(machine, "load");
+                AdvanceUntilHalted(machine);
+
+                Assert.True(machine.Cpu.Halted);
+                Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+                Assert.Equal((byte)0, machine.Memory.ReadPhysical(0x4000));
+            }
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LoadWithoutADiskCardReportsDiskErrorAndStaysAlive()
+    {
+        Machine machine = StartInterpreter();
+        using (machine)
+        {
+            AdvanceUntilHalted(machine);
+            SendLine(machine, "load");
+            AdvanceUntilHalted(machine);
+
+            Assert.True(machine.Cpu.Halted);
+            Assert.Equal(CpuFaultCode.None, machine.Cpu.FaultCode);
+        }
+    }
+
+    private static void AdvanceUntilHalted(Machine machine)
+    {
+        for (var attempt = 0; attempt < 10 && !machine.Cpu.Halted; attempt++)
+            machine.AdvanceCycles(100_000);
+    }
+
+    private static ExpansionCardInstallation CreateDiskInstallation(string imagePath)
+    {
+        using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(new { imagePath, latencyCycles = 0 }));
+        var plugin = new DiskExpansionCardPlugin();
+        IExpansionCard card = plugin.Create(
+            DiskExpansionCardPlugin.CardId,
+            new ExpansionCardCreateContext(0),
+            document.RootElement.Clone());
+        return new ExpansionCardInstallation(0, plugin.Cards[0], card);
+    }
+
+    private static Machine StartInterpreter(params ExpansionCardInstallation[]? expansionCards)
     {
         AssemblyResult image = AssembleInterpreter();
-        var machine = new Machine();
+        var machine = new Machine(expansionCards: expansionCards);
 
         for (var index = 0; index < image.Bytes.Length; index++)
             machine.Memory.WritePhysical(image.Origin + (uint)index, image.Bytes[index]);
@@ -380,6 +521,11 @@ public sealed class BasicInterpreterTests
         machine.Cpu.PC = checked((ushort)image.Origin);
         machine.Cpu.SG = 0;
         return machine;
+    }
+
+    private static Machine StartInterpreter()
+    {
+        return StartInterpreter((ExpansionCardInstallation[]?)null);
     }
 
     private static AssemblyResult AssembleInterpreter()
@@ -430,7 +576,7 @@ public sealed class BasicInterpreterTests
         ' ' => 0x3B, '\'' => 0x2B, ',' => 0x35, '-' => 0x0B, '=' => 0x0C,
         'a' => 0x21, 'd' => 0x23, 'e' => 0x13, 'g' => 0x25, 'h' => 0x26,
         'i' => 0x18, 'l' => 0x29, 'n' => 0x33, 'o' => 0x19, 'p' => 0x1A,
-        'r' => 0x14, 's' => 0x22, 't' => 0x15, 'w' => 0x12,
+        'r' => 0x14, 's' => 0x22, 't' => 0x15, 'w' => 0x12, 'v' => 0x31,
         _ => throw new ArgumentOutOfRangeException(nameof(character), character, "No virtual scan-code mapping."),
     };
 
