@@ -95,7 +95,7 @@ Guest ABI 不提供通用 `IDENTIFY` 或卡 ID 查询；操作系统和驱动必
 
 卡拥有独立、平坦的 64 KiB 地址空间：`0000h-FFFFh` 的逻辑地址就是物理地址，`SG` 不参与映射。布局为 `0010h-0011h` 的唯一外部命令中断向量（向量 `0`）、固件入口 `0300h`、初始向下增长栈 `BFFFh`、以及末尾 `FC00h-FFFFh` 的 1 KiB mailbox。
 
-外部槽命令到达时，卡先把其 mailbox 快照复制到内部 `FC00h`，把 16-bit 命令放进 `R0`，并抬起向量 `0`。固件应在启动时写入 `0010h`、执行 `EI`，通常进入 `HALT` 等待命令；中断处理程序读写 `R0` 和末尾 mailbox，执行 `IRET` 后回到 `HALT` 即完成本次外部命令，内部 mailbox 会完整写回主机卡 mailbox。
+外部槽命令到达时，卡先把其 mailbox 快照复制到内部 `FC00h`，把 16-bit 命令放进 `R0`，并抬起向量 `0`。固件应在启动时写入 `0010h`、执行 `EI`，通常进入 `HALT` 等待命令；中断处理程序读写 `R0` 和末尾 mailbox，执行 `IRET` 后回到 `HALT` 即完成本次外部命令，内部 mailbox 会完整写回主机卡 mailbox。仓库固件把命令字（big-endian）写入 mailbox `0000h-0001h`，把状态字 `0001h`（ACK）写入 `0002h-0003h` 后 `IRET`。
 
 固件源位于 `OldSimulator.Expansion.EmbeddedAsm/firmware/main.asm`。构建会先以 `Open16A-ASM -c` 生成 `.o16o`，再以 `Open16A-LD --base 0300h` 生成 `firmware.bin` 并嵌入最终 DLL。可从仓库根目录运行 `powershell -ExecutionPolicy Bypass -File OldSimulator.Expansion.EmbeddedAsm/build.ps1`，或直接运行 `dotnet build OldSimulator.Expansion.EmbeddedAsm`；IDE 和 CI 构建走同一套 MSBuild Target。`embedded-asm.example.json` 的 `settings` 为空。固件若未启用中断、未返回 `HALT` 或触发 CPU fault，外部命令不会正常完成，后者会使扩展卡进入 `PluginFault`。
 

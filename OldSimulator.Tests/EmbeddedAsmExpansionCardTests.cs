@@ -25,6 +25,10 @@ public sealed class EmbeddedAsmExpansionCardTests
             card.AdvanceCycles(1_000);
 
             Assert.True(completion.Completed);
+            Assert.Equal((byte)0xBE, mailbox[0]);
+            Assert.Equal((byte)0xEF, mailbox[1]);
+            Assert.Equal((byte)0x00, mailbox[2]);
+            Assert.Equal((byte)0x01, mailbox[3]);
         }
     }
 
