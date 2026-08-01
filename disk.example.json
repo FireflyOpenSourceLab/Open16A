@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "slots": [
+    {
+      "slot": 1,
+      "assembly": "plugins/Open16A.Disk.dll",
+      "cardId": "open16a.disk",
+      "settings": {
+        "imagePath": "D:\\disks\\system.img",
+        "readOnly": false,
+        "latencyCycles": 512
+      }
+    }
+  ]
+}

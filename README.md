@@ -9,7 +9,7 @@
 - **视频设备**:三种显示模式(256x192 8bpp 索引色 / 512x384 2bpp / 128x96 RGBA)、256 色调色板、VBlank 帧同步与视频中断
 - **键盘与中断**:扫描码快照 + FIFO 行输入,设备直接向中断控制器抬起固定向量
 - **宿主调试器**:F12 打开,支持 `loadrun`、`mem`、`poke`、`fill`、`load` 等命令
-- **扩展卡框架**:受信任 .NET 插件,独立 `AssemblyLoadContext` 装载,1 KiB mailbox 快照/写回协议;内置 EmbeddedAsm(嵌入汇编协处理器卡)与 Loopback 卡
+- **扩展卡框架**:受信任 .NET 插件,独立 `AssemblyLoadContext` 装载,1 KiB mailbox 快照/写回协议;内置 EmbeddedAsm(嵌入汇编协处理器卡)、Disk(磁盘镜像块设备卡)与 Loopback 卡
 - **完整工具链**:汇编器、静态链接器、guest 内 BASIC 解释器、LSP 语言服务器、VS Code 与 Neovim 插件
 - **可重定位对象**:`-c` 输出带重定位记录的 `.o16o`,由链接器跨模块回填
 
@@ -22,6 +22,7 @@ VirtualDevices/             CPU、内存、I/O 总线、视频、键盘、中断
 HostDevices/                宿主侧设备(屏幕、键盘、调试器控制台)
 Expansion/                  扩展卡装载与配置
 OldSimulator.Expansion.*    扩展卡框架与内置卡
+OldSimulator.Expansion.Disk  磁盘镜像块设备卡(宿主 .img 文件,512 字节扇区)
 docs/                       指令集、系统设备、扩展插件、汇编语法手册
 toolchains/Open16A-ASM      命令行汇编器
 toolchains/Open16A-LD       静态链接器

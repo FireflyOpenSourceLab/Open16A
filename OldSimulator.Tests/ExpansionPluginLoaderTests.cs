@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OldSimulator.Expansion;
+using OldSimulator.Expansion.Disk;
 using OldSimulator.Expansion.EmbeddedAsm;
 using OldSimulator.Expansion.Loopback;
 using Xunit;
@@ -75,6 +76,57 @@ public sealed class ExpansionPluginLoaderTests
         try
         {
             Assert.Equal(EmbeddedAsmExpansionCardPlugin.CardId, installation.Descriptor.Id);
+        }
+        finally
+        {
+            installation.Card.Dispose();
+        }
+    }
+
+    [Fact]
+    public void LoadDiscoversTheDiskPluginAndPerformsARead()
+    {
+        using var fixture = new LoaderFixture();
+        string imagePath = Path.Combine(fixture.DirectoryPath, "disk.img");
+        File.WriteAllBytes(imagePath, new byte[2 * DiskCardProtocol.SectorSize]);
+
+        fixture.WriteConfiguration(
+            new
+            {
+                version = 1,
+                slots = new[]
+                {
+                    new
+                    {
+                        slot = 3,
+                        assembly = typeof(DiskExpansionCardPlugin).Assembly.Location,
+                        cardId = DiskExpansionCardPlugin.CardId,
+                        settings = new { imagePath, latencyCycles = 0 }
+                    }
+                }
+            });
+
+        IReadOnlyList<ExpansionCardInstallation> installations =
+            ExpansionPluginLoader.Load(fixture.ConfigPath);
+
+        ExpansionCardInstallation installation = Assert.Single(installations);
+        try
+        {
+            Assert.Equal(DiskExpansionCardPlugin.CardId, installation.Descriptor.Id);
+
+            byte[] mailbox = new byte[ExpansionCardApi.MailboxSize];
+            mailbox[DiskCardProtocol.LbaOffset] = 0;
+            mailbox[DiskCardProtocol.LbaOffset + 1] = 0;
+            mailbox[DiskCardProtocol.LbaOffset + 2] = 0;
+            mailbox[DiskCardProtocol.LbaOffset + 3] = 1;
+            var completion = new CompletionProbe();
+
+            installation.Card.BeginCommand(DiskCardProtocol.CommandRead, mailbox, completion);
+
+            Assert.True(completion.Completed);
+            ushort status = (ushort)((mailbox[DiskCardProtocol.StatusOffset] << 8) |
+                                     mailbox[DiskCardProtocol.StatusOffset + 1]);
+            Assert.Equal(DiskCardProtocol.StatusOk, status);
         }
         finally
         {

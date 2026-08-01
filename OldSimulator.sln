@@ -18,6 +18,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OldSimulator.Expansion.Loop
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OldSimulator.Expansion.EmbeddedAsm", "OldSimulator.Expansion.EmbeddedAsm\OldSimulator.Expansion.EmbeddedAsm.csproj", "{B62A95D0-3B1E-4B61-A0A0-23CBE0E8587D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OldSimulator.Expansion.Disk", "OldSimulator.Expansion.Disk\OldSimulator.Expansion.Disk.csproj", "{AEB4A929-E384-4E67-8AF9-E146C156D25B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -60,5 +62,9 @@ Global
 		{B62A95D0-3B1E-4B61-A0A0-23CBE0E8587D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B62A95D0-3B1E-4B61-A0A0-23CBE0E8587D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B62A95D0-3B1E-4B61-A0A0-23CBE0E8587D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AEB4A929-E384-4E67-8AF9-E146C156D25B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AEB4A929-E384-4E67-8AF9-E146C156D25B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AEB4A929-E384-4E67-8AF9-E146C156D25B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AEB4A929-E384-4E67-8AF9-E146C156D25B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

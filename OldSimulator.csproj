@@ -16,6 +16,8 @@
     <ProjectReference Include="OldSimulator.Expansion.Abstractions\OldSimulator.Expansion.Abstractions.csproj"/>
     <ProjectReference Include="OldSimulator.Expansion.Loopback\OldSimulator.Expansion.Loopback.csproj"
                       ReferenceOutputAssembly="false"/>
+    <ProjectReference Include="OldSimulator.Expansion.Disk\OldSimulator.Expansion.Disk.csproj"
+                      ReferenceOutputAssembly="false"/>
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +25,9 @@
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest"/>
     <None Update="embedded-asm.example.json"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"/>
+    <None Update="disk.example.json"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest"/>
   </ItemGroup>
@@ -40,6 +45,9 @@
     <Compile Remove="OldSimulator.Expansion.EmbeddedAsm\**\*.cs"/>
     <EmbeddedResource Remove="OldSimulator.Expansion.EmbeddedAsm\**\*"/>
     <None Remove="OldSimulator.Expansion.EmbeddedAsm\**\*"/>
+    <Compile Remove="OldSimulator.Expansion.Disk\**\*.cs"/>
+    <EmbeddedResource Remove="OldSimulator.Expansion.Disk\**\*"/>
+    <None Remove="OldSimulator.Expansion.Disk\**\*"/>
     <Compile Remove="toolchains\**\*.cs"/>
     <EmbeddedResource Remove="toolchains\**\*"/>
     <None Remove="toolchains\**\*"/>
@@ -72,6 +80,20 @@
           SkipUnchangedFiles="true"/>
   </Target>
 
+  <Target Name="CopyDiskExpansionCardToOutput" AfterTargets="Build">
+    <MSBuild Projects="$(MSBuildProjectDirectory)\OldSimulator.Expansion.Disk\OldSimulator.Expansion.Disk.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)"/>
+    <ItemGroup>
+      <DiskExpansionCardFiles Include="OldSimulator.Expansion.Disk\bin\$(Configuration)\$(TargetFramework)\Open16A.Disk.dll"/>
+      <DiskExpansionCardFiles Include="OldSimulator.Expansion.Disk\bin\$(Configuration)\$(TargetFramework)\Open16A.Disk.deps.json"/>
+    </ItemGroup>
+    <MakeDir Directories="$(TargetDir)plugins"/>
+    <Copy SourceFiles="@(DiskExpansionCardFiles)"
+          DestinationFolder="$(TargetDir)plugins"
+          SkipUnchangedFiles="true"/>
+  </Target>
+
   <Target Name="CopyExampleExpansionCardToPublish" AfterTargets="Publish">
     <ItemGroup>
       <PublishedExampleExpansionCardFiles Include="OldSimulator.Expansion.Loopback\bin\$(Configuration)\$(TargetFramework)\Open16A.Loopback.dll"/>
@@ -90,6 +112,17 @@
     </ItemGroup>
     <MakeDir Directories="$(PublishDir)plugins"/>
     <Copy SourceFiles="@(PublishedEmbeddedAsmExpansionCardFiles)"
+          DestinationFolder="$(PublishDir)plugins"
+          SkipUnchangedFiles="true"/>
+  </Target>
+
+  <Target Name="CopyDiskExpansionCardToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <PublishedDiskExpansionCardFiles Include="OldSimulator.Expansion.Disk\bin\$(Configuration)\$(TargetFramework)\Open16A.Disk.dll"/>
+      <PublishedDiskExpansionCardFiles Include="OldSimulator.Expansion.Disk\bin\$(Configuration)\$(TargetFramework)\Open16A.Disk.deps.json"/>
+    </ItemGroup>
+    <MakeDir Directories="$(PublishDir)plugins"/>
+    <Copy SourceFiles="@(PublishedDiskExpansionCardFiles)"
           DestinationFolder="$(PublishDir)plugins"
           SkipUnchangedFiles="true"/>
   </Target>

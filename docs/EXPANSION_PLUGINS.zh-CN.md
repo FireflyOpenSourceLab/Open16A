@@ -98,3 +98,66 @@ Guest ABI 不提供通用 `IDENTIFY` 或卡 ID 查询；操作系统和驱动必
 外部槽命令到达时，卡先把其 mailbox 快照复制到内部 `FC00h`，把 16-bit 命令放进 `R0`，并抬起向量 `0`。固件应在启动时写入 `0010h`、执行 `EI`，通常进入 `HALT` 等待命令；中断处理程序读写 `R0` 和末尾 mailbox，执行 `IRET` 后回到 `HALT` 即完成本次外部命令，内部 mailbox 会完整写回主机卡 mailbox。
 
 固件源位于 `OldSimulator.Expansion.EmbeddedAsm/firmware/main.asm`。构建会先以 `Open16A-ASM -c` 生成 `.o16o`，再以 `Open16A-LD --base 0300h` 生成 `firmware.bin` 并嵌入最终 DLL。可从仓库根目录运行 `powershell -ExecutionPolicy Bypass -File OldSimulator.Expansion.EmbeddedAsm/build.ps1`，或直接运行 `dotnet build OldSimulator.Expansion.EmbeddedAsm`；IDE 和 CI 构建走同一套 MSBuild Target。`embedded-asm.example.json` 的 `settings` 为空。固件若未启用中断、未返回 `HALT` 或触发 CPU fault，外部命令不会正常完成，后者会使扩展卡进入 `PluginFault`。
+
+## 8. 磁盘镜像卡
+
+`OldSimulator.Expansion.Disk` 提供 `open16a.disk` 卡，稳定 ID 为 `open16a.disk`，卡协议版本为 `1`。它把宿主上的一个裸磁盘镜像文件作为块设备暴露给 guest：512 字节扇区、32-bit LBA，一次命令传输一个扇区。卡不定义文件系统；文件系统属于 guest 侧软件协议层。
+
+### 8.1 配置
+
+```json
+{
+  "version": 1,
+  "slots": [
+    {
+      "slot": 1,
+      "assembly": "plugins/Open16A.Disk.dll",
+      "cardId": "open16a.disk",
+      "settings": {
+        "imagePath": "D:\\disks\\system.img",
+        "readOnly": false,
+        "latencyCycles": 512
+      }
+    }
+  ]
+}
+```
+
+- `imagePath` 必填，必须是**绝对路径**；卡不解析相对路径。镜像文件必须已存在、长度非零且为 `512` 的倍数，扇区数必须能装入 32-bit LBA。不满足时实例创建失败，属于启动配置错误。
+- `readOnly` 可选，默认 `false`。为 `true` 时以 `FileShare.Read` 打开镜像，写命令返回 `WriteProtected`；为 `false` 时以 `FileShare.None` 独占打开。
+- `latencyCycles` 可选，默认 `512`，必须是非负整数。设为 `0` 时命令同步完成。
+
+可在 Windows 用 `fsutil file createnew system.img 1048576` 生成 1 MiB 空白镜像。
+
+### 8.2 命令与 mailbox 布局
+
+mailbox 为 1 KiB。多字节字段全部 big-endian。头部占用 `000h-00Fh`，扇区数据从 `010h` 起：
+
+| 偏移 | 字段 | 含义 |
+|---|---:|---|---|
+| `000h-001h` | 状态字 | 卡写入，见下表。 |
+| `002h-005h` | LBA | READ/WRITE 请求的 32-bit 扇区号。 |
+| `010h-20Fh` | 数据 | 512 字节扇区数据。 |
+
+| 命令 | 名称 | 请求 | 响应 |
+|---|---|---|---|
+| `0000h` | `IDENTIFY` | 无 | 容量信息写入 `002h` 起（见下）。 |
+| `0001h` | `READ` | `002h-005h` 为 LBA | 状态字 + `010h` 起 512 字节数据。 |
+| `0002h` | `WRITE` | LBA + `010h` 起 512 字节数据 | 状态字。 |
+| 其他 | — | — | 状态字 `UnknownCommand`，数据区清零。 |
+
+`IDENTIFY` 响应自 `002h` 起：
+
+| 偏移 | 字段 | 含义 |
+|---|---:|---|---|
+| `002h-005h` | magic | `4Fh 44h 53h 4Bh`（`"ODSK"`），用于确认槽位安装的确实是磁盘卡。 |
+| `006h-007h` | 协议版本 | 当前为 `1`。 |
+| `008h-009h` | 扇区大小 | `0200h`（512）。 |
+| `00Ah-00Dh` | 扇区总数 | 32-bit，等于镜像长度除以扇区大小。 |
+| `00Eh-00Fh` | flags | bit `0h` 为 `ReadOnly`。 |
+
+状态字取值：`0000h` `Ok`、`0001h` `UnknownCommand`、`0002h` `LbaOutOfRange`、`0003h` `WriteProtected`、`0004h` `HostIoError`。普通协议错误（未知命令、越界、只读写入）通过状态字返回，不抛异常。`HostIoError` 表示宿主文件 I/O 失败；命令期其他任何插件异常仍会使卡进入 `PluginFault`。
+
+### 8.3 执行模型
+
+`BeginCommand` 会在私有 mailbox 副本上立即完成宿主文件 I/O（读取扇区或写入扇区），然后按 `latencyCycles` 倒计时，由 `AdvanceCycles` 推进到零后调用 `Complete()`。已落盘的写不受之后 `Reset()` 影响；`Reset()` 只取消未完成的命令，`Dispose()` 同时关闭镜像文件句柄。宿主 I/O 错误映射为 `HostIoError` 状态字，而不是插件异常。
