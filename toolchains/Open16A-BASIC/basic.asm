@@ -677,27 +677,23 @@ tokenize_error:
 ; zero token count on capacity overflow.
 token_emit:
     push r4
-    li r1, token_count
-    ld.w r2, [r1]
+    li r4, state_base
+    ld.w r2, [r4 + token_count - state_base]
     li r3, 007fh
     bhs r2, r3, token_emit_overflow
-    li r3, token_out
-    ld.w r3, [r3]
+    ld.w r3, [r4 + token_out - state_base]
     st.b r0, [r3]
-    li r4, 1
-    add r3, r3, r4
-    li r4, token_out
-    st.w r3, [r4]
-    li r4, 1
-    add r2, r2, r4
-    li r1, token_count
-    st.w r2, [r1]
+    li r1, 1
+    add r3, r3, r1
+    st.w r3, [r4 + token_out - state_base]
+    li r1, 1
+    add r2, r2, r1
+    st.w r2, [r4 + token_count - state_base]
     pop r4
     ret
 token_emit_overflow:
-    li r1, token_count
     li r2, 0
-    st.w r2, [r1]
+    st.w r2, [r4 + token_count - state_base]
     pop r4
     ret
 
@@ -3260,6 +3256,7 @@ disk_dst:
     .word 0
 disk_status:
     .word 0
+state_base:
 record_token_length:
     .word 0
 record_string_source:
