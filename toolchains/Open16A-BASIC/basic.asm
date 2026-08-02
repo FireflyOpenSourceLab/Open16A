@@ -2306,60 +2306,45 @@ run_line_graphics:
     li r3, graphics_color
     st.w r0, [r3]
     calla graphics_line_prepare
+    push r4
 graphics_line_loop:
-    li r3, line_x
-    ld.w r0, [r3]
-    li r5, graphics_x
-    st.w r0, [r5]
-    li r3, line_y
-    ld.w r0, [r3]
-    li r5, graphics_y
-    st.w r0, [r5]
+    li r4, graphics_block
+    ld.w r0, [r4 + line_x - graphics_block]
+    st.w r0, [r4 + graphics_x - graphics_block]
+    ld.w r0, [r4 + line_y - graphics_block]
+    st.w r0, [r4 + graphics_y - graphics_block]
     calla graphics_set_pixel
-    li r3, line_x
-    ld.w r5, [r3]
-    li r3, line_x2
-    ld.w r6, [r3]
+    li r4, graphics_block
+    ld.w r5, [r4 + line_x - graphics_block]
+    ld.w r6, [r4 + line_x2 - graphics_block]
     bne r5, r6, graphics_line_step
-    li r3, line_y
-    ld.w r5, [r3]
-    li r3, line_y2
-    ld.w r6, [r3]
+    ld.w r5, [r4 + line_y - graphics_block]
+    ld.w r6, [r4 + line_y2 - graphics_block]
     beq r5, r6, graphics_line_done
 graphics_line_step:
-    li r3, line_error
-    ld.w r5, [r3]
+    ld.w r5, [r4 + line_error - graphics_block]
     add r7, r5, r5
-    li r3, line_dy
-    ld.w r6, [r3]
+    ld.w r6, [r4 + line_dy - graphics_block]
     blt r7, r6, graphics_line_y_step
     add r5, r5, r6
-    li r3, line_error
-    st.w r5, [r3]
-    li r3, line_x
-    ld.w r5, [r3]
-    li r3, line_sx
-    ld.w r6, [r3]
+    st.w r5, [r4 + line_error - graphics_block]
+    ld.w r5, [r4 + line_x - graphics_block]
+    ld.w r6, [r4 + line_sx - graphics_block]
     add r5, r5, r6
-    li r3, line_x
-    st.w r5, [r3]
+    st.w r5, [r4 + line_x - graphics_block]
 graphics_line_y_step:
-    li r3, line_dx
-    ld.w r6, [r3]
+    ld.w r6, [r4 + line_dx - graphics_block]
     bgt r7, r6, graphics_line_loop
-    li r3, line_error
-    ld.w r5, [r3]
+    ld.w r5, [r4 + line_error - graphics_block]
     add r5, r5, r6
-    st.w r5, [r3]
-    li r3, line_y
-    ld.w r5, [r3]
-    li r3, line_sy
-    ld.w r6, [r3]
+    st.w r5, [r4 + line_error - graphics_block]
+    ld.w r5, [r4 + line_y - graphics_block]
+    ld.w r6, [r4 + line_sy - graphics_block]
     add r5, r5, r6
-    li r3, line_y
-    st.w r5, [r3]
+    st.w r5, [r4 + line_y - graphics_block]
     jmpa graphics_line_loop
 graphics_line_done:
+    pop r4
     jmpa run_token
 
 graphics_line_prepare:
@@ -2436,103 +2421,79 @@ run_circle:
     calla read_integer
     li r3, graphics_color
     st.w r0, [r3]
+    push r4
 graphics_circle_loop:
-    li r3, circle_x
-    ld.w r5, [r3]
-    li r3, circle_y
-    ld.w r6, [r3]
+    li r4, graphics_block
+    ld.w r5, [r4 + circle_x - graphics_block]
+    ld.w r6, [r4 + circle_y - graphics_block]
     blt r5, r6, graphics_circle_done
-    li r3, circle_plot_dx
-    st.w r5, [r3]
-    li r3, circle_plot_dy
-    st.w r6, [r3]
+    st.w r5, [r4 + circle_plot_dx - graphics_block]
+    st.w r6, [r4 + circle_plot_dy - graphics_block]
     calla graphics_circle_plot_four
-    li r3, circle_x
-    ld.w r5, [r3]
-    li r3, circle_plot_dy
-    st.w r5, [r3]
-    li r3, circle_y
-    ld.w r6, [r3]
-    li r3, circle_plot_dx
-    st.w r6, [r3]
+    li r4, graphics_block
+    ld.w r5, [r4 + circle_x - graphics_block]
+    st.w r5, [r4 + circle_plot_dy - graphics_block]
+    ld.w r6, [r4 + circle_y - graphics_block]
+    st.w r6, [r4 + circle_plot_dx - graphics_block]
     calla graphics_circle_plot_four
-    li r3, circle_y
-    ld.w r5, [r3]
+    li r4, graphics_block
+    ld.w r5, [r4 + circle_y - graphics_block]
     li r6, 1
     add r5, r5, r6
-    st.w r5, [r3]
-    li r3, circle_error
-    ld.w r5, [r3]
+    st.w r5, [r4 + circle_y - graphics_block]
+    ld.w r5, [r4 + circle_error - graphics_block]
     li r6, 0
     blt r5, r6, graphics_circle_error_negative
-    li r3, circle_x
-    ld.w r6, [r3]
+    ld.w r6, [r4 + circle_x - graphics_block]
     li r7, 1
     sub r6, r6, r7
-    st.w r6, [r3]
-    li r3, circle_y
-    ld.w r7, [r3]
+    st.w r6, [r4 + circle_x - graphics_block]
+    ld.w r7, [r4 + circle_y - graphics_block]
     sub r7, r7, r6
     add r7, r7, r7
     li r6, 1
     add r7, r7, r6
     add r7, r7, r5
-    li r3, circle_error
-    st.w r7, [r3]
+    st.w r7, [r4 + circle_error - graphics_block]
     jmpa graphics_circle_loop
 graphics_circle_error_negative:
-    li r3, circle_y
-    ld.w r6, [r3]
+    ld.w r6, [r4 + circle_y - graphics_block]
     add r6, r6, r6
     li r7, 1
     add r6, r6, r7
     add r5, r5, r6
-    li r3, circle_error
-    st.w r5, [r3]
+    st.w r5, [r4 + circle_error - graphics_block]
     jmpa graphics_circle_loop
 graphics_circle_done:
+    pop r4
     jmpa run_token
 
 ; Draws the four sign combinations of circle_plot_dx/circle_plot_dy.
 graphics_circle_plot_four:
-    li r3, circle_cx
-    ld.w r5, [r3]
-    li r3, circle_plot_dx
-    ld.w r6, [r3]
+    li r4, graphics_block
+    ld.w r5, [r4 + circle_cx - graphics_block]
+    ld.w r6, [r4 + circle_plot_dx - graphics_block]
     add r0, r5, r6
-    li r3, graphics_x
-    st.w r0, [r3]
-    li r3, circle_cy
-    ld.w r5, [r3]
-    li r3, circle_plot_dy
-    ld.w r6, [r3]
+    st.w r0, [r4 + graphics_x - graphics_block]
+    ld.w r5, [r4 + circle_cy - graphics_block]
+    ld.w r6, [r4 + circle_plot_dy - graphics_block]
     add r0, r5, r6
-    li r3, graphics_y
-    st.w r0, [r3]
+    st.w r0, [r4 + graphics_y - graphics_block]
     calla graphics_set_pixel
-    li r3, circle_cx
-    ld.w r5, [r3]
-    li r3, circle_plot_dx
-    ld.w r6, [r3]
+    ld.w r5, [r4 + circle_cx - graphics_block]
+    ld.w r6, [r4 + circle_plot_dx - graphics_block]
     sub r0, r5, r6
-    li r3, graphics_x
-    st.w r0, [r3]
+    st.w r0, [r4 + graphics_x - graphics_block]
     calla graphics_set_pixel
-    li r3, circle_cy
-    ld.w r5, [r3]
-    li r3, circle_plot_dy
-    ld.w r6, [r3]
+    ld.w r5, [r4 + circle_cy - graphics_block]
+    ld.w r6, [r4 + circle_plot_dy - graphics_block]
     sub r0, r5, r6
-    li r3, graphics_y
-    st.w r0, [r3]
+    st.w r0, [r4 + graphics_y - graphics_block]
     calla graphics_set_pixel
-    li r3, circle_cx
-    ld.w r5, [r3]
-    li r3, circle_plot_dx
-    ld.w r6, [r3]
+    ld.w r5, [r4 + circle_cx - graphics_block]
+    ld.w r6, [r4 + circle_plot_dx - graphics_block]
     add r0, r5, r6
-    li r3, graphics_x
-    st.w r0, [r3]
+    st.w r0, [r4 + graphics_x - graphics_block]
     calla graphics_set_pixel
     ret
 
@@ -3411,6 +3372,7 @@ io_port:
     .word 0
 graphics_mode:
     .byte 0
+graphics_block:
 graphics_x:
     .word 0
 graphics_y:
