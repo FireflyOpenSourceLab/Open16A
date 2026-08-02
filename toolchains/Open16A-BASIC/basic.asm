@@ -2305,8 +2305,8 @@ run_line_graphics:
     calla read_integer
     li r3, graphics_color
     st.w r0, [r3]
-    calla graphics_line_prepare
     push r4
+    calla graphics_line_prepare
 graphics_line_loop:
     li r4, graphics_block
     ld.w r0, [r4 + line_x - graphics_block]
@@ -2348,40 +2348,31 @@ graphics_line_done:
     jmpa run_token
 
 graphics_line_prepare:
-    li r3, line_x2
-    ld.w r6, [r3]
-    li r3, line_x
-    ld.w r5, [r3]
+    li r4, graphics_block
+    ld.w r6, [r4 + line_x2 - graphics_block]
+    ld.w r5, [r4 + line_x - graphics_block]
     sub r0, r6, r5
     li r7, 1
     bge r0, r7, graphics_line_sx_ready
     li r7, -1
     neg r0, r0
 graphics_line_sx_ready:
-    li r3, line_sx
-    st.w r7, [r3]
-    li r3, line_dx
-    st.w r0, [r3]
-    li r3, line_y2
-    ld.w r6, [r3]
-    li r3, line_y
-    ld.w r5, [r3]
+    st.w r7, [r4 + line_sx - graphics_block]
+    st.w r0, [r4 + line_dx - graphics_block]
+    ld.w r6, [r4 + line_y2 - graphics_block]
+    ld.w r5, [r4 + line_y - graphics_block]
     sub r0, r6, r5
     li r7, 1
     bge r0, r7, graphics_line_sy_ready
     li r7, -1
     neg r0, r0
 graphics_line_sy_ready:
-    li r3, line_sy
-    st.w r7, [r3]
+    st.w r7, [r4 + line_sy - graphics_block]
     neg r0, r0
-    li r3, line_dy
-    st.w r0, [r3]
-    li r3, line_dx
-    ld.w r5, [r3]
+    st.w r0, [r4 + line_dy - graphics_block]
+    ld.w r5, [r4 + line_dx - graphics_block]
     add r0, r0, r5
-    li r3, line_error
-    st.w r0, [r3]
+    st.w r0, [r4 + line_error - graphics_block]
     ret
 
 run_circle:
@@ -2543,18 +2534,17 @@ graphics_map_offset:
 ; Resolves graphics_x/graphics_y in the selected mode. R0=1 and R6 is the
 ; mapped logical byte address on success; R0=0 clips an invalid coordinate.
 graphics_locate_pixel:
-    li r3, graphics_mode
-    ld.bu r3, [r3]
+    push r4
+    li r4, graphics_block
+    ld.bu r3, [r4 + graphics_mode - graphics_block]
     li r5, 0
     beq r3, r5, graphics_locate_mode0
     li r5, 1
     beq r3, r5, graphics_locate_mode1
-    li r3, graphics_x
-    ld.w r5, [r3]
+    ld.w r5, [r4 + graphics_x - graphics_block]
     li r6, 128
     bhs r5, r6, graphics_locate_invalid
-    li r3, graphics_y
-    ld.w r0, [r3]
+    ld.w r0, [r4 + graphics_y - graphics_block]
     li r6, 96
     bhs r0, r6, graphics_locate_invalid
     li r6, 9
@@ -2564,12 +2554,10 @@ graphics_locate_pixel:
     add r0, r0, r5
     jmpa graphics_locate_map
 graphics_locate_mode0:
-    li r3, graphics_x
-    ld.w r5, [r3]
+    ld.w r5, [r4 + graphics_x - graphics_block]
     li r6, 256
     bhs r5, r6, graphics_locate_invalid
-    li r3, graphics_y
-    ld.w r0, [r3]
+    ld.w r0, [r4 + graphics_y - graphics_block]
     li r6, 192
     bhs r0, r6, graphics_locate_invalid
     li r6, 8
@@ -2577,12 +2565,10 @@ graphics_locate_mode0:
     add r0, r0, r5
     jmpa graphics_locate_map
 graphics_locate_mode1:
-    li r3, graphics_x
-    ld.w r5, [r3]
+    ld.w r5, [r4 + graphics_x - graphics_block]
     li r6, 512
     bhs r5, r6, graphics_locate_invalid
-    li r3, graphics_y
-    ld.w r0, [r3]
+    ld.w r0, [r4 + graphics_y - graphics_block]
     li r6, 384
     bhs r0, r6, graphics_locate_invalid
     li r6, 7
@@ -2592,9 +2578,11 @@ graphics_locate_mode1:
     add r0, r0, r7
 graphics_locate_map:
     calla graphics_map_offset
+    pop r4
     li r0, 1
     ret
 graphics_locate_invalid:
+    pop r4
     li r0, 0
     ret
 
@@ -2604,17 +2592,16 @@ graphics_set_pixel:
     push r4
     rdsg r7
     push r7
+    li r4, graphics_block
     calla graphics_locate_pixel
     li r3, 0
     beq r0, r3, graphics_set_done
-    li r3, graphics_mode
-    ld.bu r3, [r3]
+    ld.bu r3, [r4 + graphics_mode - graphics_block]
     li r5, 0
     beq r3, r5, graphics_set_mode0
     li r5, 1
     beq r3, r5, graphics_set_mode1
-    li r3, graphics_color
-    ld.w r5, [r3]
+    ld.w r5, [r4 + graphics_color - graphics_block]
     li r7, 12
     shr r0, r5, r7
     li r7, 17
@@ -2641,14 +2628,12 @@ graphics_set_pixel:
     st.b r0, [r6 + 3]
     jmpa graphics_set_done
 graphics_set_mode0:
-    li r3, graphics_color
-    ld.w r5, [r3]
+    ld.w r5, [r4 + graphics_color - graphics_block]
     st.b r5, [r6]
     jmpa graphics_set_done
 graphics_set_mode1:
     ld.bu r0, [r6]
-    li r3, graphics_x
-    ld.w r5, [r3]
+    ld.w r5, [r4 + graphics_x - graphics_block]
     li r7, 3
     and r5, r5, r7
     li r7, 3
@@ -2659,8 +2644,7 @@ graphics_set_mode1:
     shl r7, r7, r5
     not r7, r7
     and r0, r0, r7
-    li r3, graphics_color
-    ld.w r7, [r3]
+    ld.w r7, [r4 + graphics_color - graphics_block]
     li r3, 3
     and r7, r7, r3
     shl r7, r7, r5
