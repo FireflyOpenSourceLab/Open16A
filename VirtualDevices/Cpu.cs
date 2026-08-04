@@ -54,7 +54,29 @@ public enum ExtendedOpcode : ushort
     IntegerFloatShiftRightArithmetic = 39,
     IntegerFloatRotateLeft = 40,
     IntegerFloatRotateRight = 41,
-    IntegerFloatLoadImmediate = 42
+    IntegerFloatLoadImmediate = 42,
+
+    // Compact integer operations encode their register operands in the selector itself.
+    AddOneBase = 0x040,
+    SubtractOneBase = 0x080,
+    LoadOneBase = 0x0C0,
+    LoadOneAndAddBase = 0x100,
+    LoadOneAndSubtractBase = 0x300,
+
+    // Immediate integer operations encode their destination and source registers in the selector.
+    AddImmediateBase = 0x500,
+    SubtractImmediateBase = 0x540,
+    MultiplyImmediateBase = 0x580,
+    DivideSignedImmediateBase = 0x5C0,
+    DivideUnsignedImmediateBase = 0x600,
+
+    // Raw 32-bit transfers between the FP integer overlay and general-purpose registers.
+    IntegerFloatUnpack = 0x640,
+    IntegerFloatGetHigh = 0x641,
+    IntegerFloatGetLow = 0x642,
+    IntegerFloatSetHigh = 0x643,
+    IntegerFloatSetLow = 0x644,
+    IntegerFloatPack = 0x645
 }
 
 public sealed class Cpu
@@ -289,6 +311,96 @@ public sealed class Cpu
 
     private ulong ExecuteExtended(ushort operation, ushort instructionAddress)
     {
+        if (operation is >= (ushort)ExtendedOpcode.AddOneBase and < (ushort)ExtendedOpcode.SubtractOneBase)
+        {
+            int packed = operation - (ushort)ExtendedOpcode.AddOneBase;
+            int destination = packed >> 3;
+            int source = packed & 7;
+            Registers[destination] = unchecked((ushort)(Registers[source] + 1));
+            return 1;
+        }
+
+        if (operation is >= (ushort)ExtendedOpcode.SubtractOneBase and < (ushort)(ExtendedOpcode.SubtractOneBase + 64))
+        {
+            int packed = operation - (ushort)ExtendedOpcode.SubtractOneBase;
+            int destination = packed >> 3;
+            int source = packed & 7;
+            Registers[destination] = unchecked((ushort)(Registers[source] - 1));
+            return 1;
+        }
+
+        if (operation is >= (ushort)ExtendedOpcode.LoadOneBase and < (ushort)(ExtendedOpcode.LoadOneBase + 8))
+        {
+            Registers[operation - (ushort)ExtendedOpcode.LoadOneBase] = 1;
+            return 1;
+        }
+
+        if (operation is >= (ushort)ExtendedOpcode.LoadOneAndAddBase and < (ushort)ExtendedOpcode.LoadOneAndSubtractBase)
+        {
+            int packed = operation - (ushort)ExtendedOpcode.LoadOneAndAddBase;
+            int destination = packed >> 6;
+            int source = (packed >> 3) & 7;
+            int one = packed & 7;
+            Registers[one] = 1;
+            Registers[destination] = unchecked((ushort)(Registers[source] + Registers[one]));
+            return 2;
+        }
+
+        if (operation is >= (ushort)ExtendedOpcode.LoadOneAndSubtractBase and < (ushort)(ExtendedOpcode.LoadOneAndSubtractBase + 512))
+        {
+            int packed = operation - (ushort)ExtendedOpcode.LoadOneAndSubtractBase;
+            int destination = packed >> 6;
+            int source = (packed >> 3) & 7;
+            int one = packed & 7;
+            Registers[one] = 1;
+            Registers[destination] = unchecked((ushort)(Registers[source] - Registers[one]));
+            return 2;
+        }
+
+        if (operation is >= (ushort)ExtendedOpcode.AddImmediateBase and < (ushort)(ExtendedOpcode.AddImmediateBase + 64))
+        {
+            int packed = operation - (ushort)ExtendedOpcode.AddImmediateBase;
+            ushort immediate = fetchWord();
+            Registers[packed >> 3] = unchecked((ushort)(Registers[packed & 7] + immediate));
+            return 2;
+        }
+
+        if (operation is >= (ushort)ExtendedOpcode.SubtractImmediateBase and < (ushort)(ExtendedOpcode.SubtractImmediateBase + 64))
+        {
+            int packed = operation - (ushort)ExtendedOpcode.SubtractImmediateBase;
+            ushort immediate = fetchWord();
+            Registers[packed >> 3] = unchecked((ushort)(Registers[packed & 7] - immediate));
+            return 2;
+        }
+
+        if (operation is >= (ushort)ExtendedOpcode.MultiplyImmediateBase and < (ushort)(ExtendedOpcode.MultiplyImmediateBase + 64))
+        {
+            int packed = operation - (ushort)ExtendedOpcode.MultiplyImmediateBase;
+            ushort immediate = fetchWord();
+            Registers[packed >> 3] = unchecked((ushort)((short)Registers[packed & 7] * (short)immediate));
+            return 3;
+        }
+
+        if (operation is >= (ushort)ExtendedOpcode.DivideSignedImmediateBase and < (ushort)(ExtendedOpcode.DivideSignedImmediateBase + 64))
+        {
+            int packed = operation - (ushort)ExtendedOpcode.DivideSignedImmediateBase;
+            ushort immediate = fetchWord();
+            if (immediate == 0)
+                return fault(CpuFaultCode.DivisionByZero, instructionAddress);
+            Registers[packed >> 3] = unchecked((ushort)((short)Registers[packed & 7] / (short)immediate));
+            return 3;
+        }
+
+        if (operation is >= (ushort)ExtendedOpcode.DivideUnsignedImmediateBase and < (ushort)(ExtendedOpcode.DivideUnsignedImmediateBase + 64))
+        {
+            int packed = operation - (ushort)ExtendedOpcode.DivideUnsignedImmediateBase;
+            ushort immediate = fetchWord();
+            if (immediate == 0)
+                return fault(CpuFaultCode.DivisionByZero, instructionAddress);
+            Registers[packed >> 3] = (ushort)(Registers[packed & 7] / immediate);
+            return 3;
+        }
+
         switch ((ExtendedOpcode)operation)
         {
             case ExtendedOpcode.Branch:
@@ -511,6 +623,46 @@ public sealed class Cpu
             case ExtendedOpcode.IntegerFloatRotateRight:
                 return ExecuteIntegerFloatBinary(RotateRight, instructionAddress);
 
+            case ExtendedOpcode.IntegerFloatUnpack:
+                if (!TryFetchRegisterOperands(out int highDestination, out int lowDestination, out int unpackSource, instructionAddress))
+                    return 1;
+                uint unpacked = FloatingPointRegisters[unpackSource];
+                Registers[highDestination] = (ushort)(unpacked >> 16);
+                Registers[lowDestination] = (ushort)unpacked;
+                return 2;
+
+            case ExtendedOpcode.IntegerFloatGetHigh:
+                if (!TryFetchUnaryOperands(out int highGetDestination, out int highGetSource, instructionAddress))
+                    return 1;
+                Registers[highGetDestination] = (ushort)(FloatingPointRegisters[highGetSource] >> 16);
+                return 2;
+
+            case ExtendedOpcode.IntegerFloatGetLow:
+                if (!TryFetchUnaryOperands(out int lowGetDestination, out int lowGetSource, instructionAddress))
+                    return 1;
+                Registers[lowGetDestination] = (ushort)FloatingPointRegisters[lowGetSource];
+                return 2;
+
+            case ExtendedOpcode.IntegerFloatSetHigh:
+                if (!TryFetchUnaryOperands(out int highSetDestination, out int highSetSource, instructionAddress))
+                    return 1;
+                FloatingPointRegisters[highSetDestination] = ((uint)Registers[highSetSource] << 16)
+                    | (FloatingPointRegisters[highSetDestination] & 0xFFFF);
+                return 2;
+
+            case ExtendedOpcode.IntegerFloatSetLow:
+                if (!TryFetchUnaryOperands(out int lowSetDestination, out int lowSetSource, instructionAddress))
+                    return 1;
+                FloatingPointRegisters[lowSetDestination] = (FloatingPointRegisters[lowSetDestination] & 0xFFFF_0000)
+                    | Registers[lowSetSource];
+                return 2;
+
+            case ExtendedOpcode.IntegerFloatPack:
+                if (!TryFetchRegisterOperands(out int packDestination, out int packHighSource, out int packLowSource, instructionAddress))
+                    return 1;
+                FloatingPointRegisters[packDestination] = ((uint)Registers[packHighSource] << 16) | Registers[packLowSource];
+                return 2;
+
             default:
                 return fault(CpuFaultCode.IllegalOpcode, instructionAddress);
         }
@@ -668,6 +820,17 @@ public sealed class Cpu
 
     private static ulong GetExtendedInstructionCost(ushort operation)
     {
+        if (operation is >= (ushort)ExtendedOpcode.AddOneBase and < (ushort)(ExtendedOpcode.SubtractOneBase + 64))
+            return 1;
+        if (operation is >= (ushort)ExtendedOpcode.LoadOneBase and < (ushort)(ExtendedOpcode.LoadOneBase + 8))
+            return 1;
+        if (operation is >= (ushort)ExtendedOpcode.LoadOneAndAddBase and < (ushort)(ExtendedOpcode.LoadOneAndSubtractBase + 512))
+            return 2;
+        if (operation is >= (ushort)ExtendedOpcode.AddImmediateBase and < (ushort)ExtendedOpcode.MultiplyImmediateBase)
+            return 2;
+        if (operation is >= (ushort)ExtendedOpcode.MultiplyImmediateBase and < (ushort)(ExtendedOpcode.DivideUnsignedImmediateBase + 64))
+            return 3;
+
         return (ExtendedOpcode)operation switch
         {
             ExtendedOpcode.Branch => 3,
@@ -687,7 +850,10 @@ public sealed class Cpu
             or ExtendedOpcode.IntegerFloatOr or ExtendedOpcode.IntegerFloatXor or ExtendedOpcode.IntegerFloatNot
             or ExtendedOpcode.IntegerFloatShiftLeft or ExtendedOpcode.IntegerFloatShiftRight
             or ExtendedOpcode.IntegerFloatShiftRightArithmetic or ExtendedOpcode.IntegerFloatRotateLeft
-            or ExtendedOpcode.IntegerFloatRotateRight => 2,
+            or ExtendedOpcode.IntegerFloatRotateRight or ExtendedOpcode.IntegerFloatUnpack
+            or ExtendedOpcode.IntegerFloatGetHigh or ExtendedOpcode.IntegerFloatGetLow
+            or ExtendedOpcode.IntegerFloatSetHigh or ExtendedOpcode.IntegerFloatSetLow
+            or ExtendedOpcode.IntegerFloatPack => 2,
             _ => 1
         };
     }

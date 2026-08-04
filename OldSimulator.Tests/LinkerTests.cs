@@ -114,6 +114,36 @@ public sealed class LinkerTests
     }
 
     [Fact]
+    public void RelocatesImmediateArithmeticOperands()
+    {
+        ObjectModule caller = new Assembler().AssembleObject("""
+            .extern value
+            ADDI R2, R3, value
+            SUBI R4, R5, value + 1
+            MULI R6, R0, value + 2
+            DIVI R7, R1, value + 3
+            DIVUI R1, R2, value + 4
+            """);
+        ObjectModule callee = new Assembler().AssembleObject("""
+            .global value
+            value:
+                RET
+            """);
+
+        LinkResult result = new Linker().LinkObjects([caller, callee], 0x0300);
+
+        Assert.Equal(new byte[]
+        {
+            0xFD, 0x13, 0x03, 0x14,
+            0xFD, 0x65, 0x03, 0x15,
+            0xFD, 0xB0, 0x03, 0x16,
+            0xFD, 0xF9, 0x03, 0x17,
+            0xFE, 0x0A, 0x03, 0x18,
+            0x98, 0x00
+        }, result.Bytes);
+    }
+
+    [Fact]
     public void RejectsUnresolvedExternalSymbols()
     {
         ObjectModule caller = new Assembler().AssembleObject("""

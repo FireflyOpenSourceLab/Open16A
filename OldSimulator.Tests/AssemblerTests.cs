@@ -111,4 +111,43 @@ public sealed class AssemblerTests
             0xF8, 0x18, 0x02, 0x04
         }, result.Bytes);
     }
+
+    [Fact]
+    public void AssemblesCompactAddAndSubtractOneInstructions()
+    {
+        AssemblyResult result = new Assembler().Assemble("LI1 R5\nADD1 R2, R3\nSUB1 R7, R0\nADD1 R2, R3, R4\nSUB1 R7, R0, R6\n");
+
+        Assert.Equal(new byte[] { 0xF8, 0xC5, 0xF8, 0x53, 0xF8, 0xB8, 0xF9, 0x9C, 0xFC, 0xC6 }, result.Bytes);
+    }
+
+    [Fact]
+    public void AssemblesImmediateArithmeticInstructions()
+    {
+        AssemblyResult result = new Assembler().Assemble("ADDI R2, R3, -2\nSUBI R4, R5, 7\nMULI R6, R0, FFFDh\nDIVI R7, R1, 3\nDIVUI R1, R2, 8000h\n");
+
+        Assert.Equal(new byte[]
+        {
+            0xFD, 0x13, 0xFF, 0xFE,
+            0xFD, 0x65, 0x00, 0x07,
+            0xFD, 0xB0, 0xFF, 0xFD,
+            0xFD, 0xF9, 0x00, 0x03,
+            0xFE, 0x0A, 0x80, 0x00
+        }, result.Bytes);
+    }
+
+    [Fact]
+    public void AssemblesRawIntegerFloatRegisterTransfers()
+    {
+        AssemblyResult result = new Assembler().Assemble("IFPUNPACK R1, R2, FP3\nIFPGETH R4, FP5\nIFPGETL R6, FP7\nIFPSETH FP1, R2\nIFPSETL FP3, R4\nIFPPACK FP5, R6, R7\n");
+
+        Assert.Equal(new byte[]
+        {
+            0xFE, 0x40, 0x01, 0x4C,
+            0xFE, 0x41, 0x04, 0xA0,
+            0xFE, 0x42, 0x06, 0xE0,
+            0xFE, 0x43, 0x01, 0x40,
+            0xFE, 0x44, 0x03, 0x80,
+            0xFE, 0x45, 0x05, 0xDC
+        }, result.Bytes);
+    }
 }

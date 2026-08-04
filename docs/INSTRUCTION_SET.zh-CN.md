@@ -85,7 +85,7 @@ Open16A 是一台以 16-bit 字为基本运算单位的机器。寄存器、普�
 +--------------+-----------------------------------------+
 ```
 
-当前 selector 是 `000h-02Ah`。除非下文另有定义，寄存器描述字采用 `Rd/Ra/Rb/00` 布局。未知 selector 是 `IllegalOpcode` 故障。
+当前已定义 selector 是 `000h-02Ah`、`040h-0C7h`、`100h-4FFh`、`500h-63Fh` 与 `640h-645h`。除非下文另有定义，寄存器描述字采用 `Rd/Ra/Rb/00` 布局。未知 selector 是 `IllegalOpcode` 故障。
 
 ### 4.1 比较与控制流
 
@@ -142,6 +142,26 @@ Open16A 是一台以 16-bit 字为基本运算单位的机器。寄存器、普�
 | `012h` | `ROL Rd, Ra, Rb` | 循环左移 `Rb & 0Fh` 位。 |
 | `013h` | `ROR Rd, Ra, Rb` | 循环右移 `Rb & 0Fh` 位。 |
 
+### 4.3.1 单字加减一
+
+`0C0h+Rd` 编码 `LI1 Rd`，将常数 `1` 写入 `Rd`；它也是一字、一个 cycle。
+
+`040h+(Rd<<3)+Ra` 编码 `ADD1 Rd, Ra`，结果为 `Rd = Ra + 1`；`080h+(Rd<<3)+Ra` 的 `SUB1 Rd, Ra` 则为 `Rd = Ra - 1`。二者都是一字、一个 cycle，并保留低 16 bit。
+
+三寄存器写法是为紧凑汇编而设的精确宏融合：`100h+(Rd<<6)+(Ra<<3)+Rb` 编码 `ADD1 Rd, Ra, Rb`，其效果严格等于先 `LI Rb, 1`，再 `ADD Rd, Ra, Rb`；`300h+(Rd<<6)+(Ra<<3)+Rb` 的 `SUB1 Rd, Ra, Rb` 同理等于 `LI Rb, 1` 后执行 `SUB`。它们只占一字，但维持原两条指令的两个 cycle，并且即使寄存器重名也按“先写 `Rb`”的顺序执行。
+
+### 4.3.2 立即数算术
+
+下列指令均为两字：第一字是将 `Rd`、`Ra` 编入 selector 的 `EXT`，第二字是 `imm16`。`ADDI` 和 `SUBI` 以低 16 bit 环绕；`MULI` 和 `DIVI` 将两侧都按有符号 16-bit 值解释，`DIVUI` 则按无符号 16-bit 值解释。
+
+| selector | 助记符 | cycle | 语义 |
+|---:|---|---:|---|
+| `500h+(Rd<<3)+Ra` | `ADDI Rd, Ra, imm16` | 2 | `Rd = low16(Ra + imm16)`。 |
+| `540h+(Rd<<3)+Ra` | `SUBI Rd, Ra, imm16` | 2 | `Rd = low16(Ra - imm16)`。 |
+| `580h+(Rd<<3)+Ra` | `MULI Rd, Ra, imm16` | 3 | 有符号乘法，结果低 16 bit 写入 `Rd`。 |
+| `5C0h+(Rd<<3)+Ra` | `DIVI Rd, Ra, imm16` | 3 | 有符号除法，向零截断；`imm16 = 0` 时触发 `DivisionByZero`。 |
+| `600h+(Rd<<3)+Ra` | `DIVUI Rd, Ra, imm16` | 3 | 无符号除法；`imm16 = 0` 时触发 `DivisionByZero`。 |
+
 ### 4.4 32-bit 浮点与 IFP 覆盖层
 
 `FP0-FP7` 为 8 个 32-bit 寄存器。`FLI` 的常量是 IEEE-754 single；`FLD/FST` 在逻辑地址空间以 big-endian 读写连续四字节。浮点算术遵循 IEEE-754 binary32 行为，除以零产生无穷大或 NaN，不触发 `DivisionByZero` 故障。
@@ -162,6 +182,19 @@ Open16A 是一台以 16-bit 字为基本运算单位的机器。寄存器、普�
 | `02Ah` | `IFPLI FPd, imm32` | 4 | 装入 raw 32-bit 常量。 |
 
 `FLI FP0, 1.5` 产生 `3FC00000h`；`IFPLI FP0, 3FC00000h` 产生相同位模式但不进行浮点解析。
+
+### 4.4.1 R/FP raw 位搬运
+
+下列指令均为两字、两个 cycle：`EXT` 后接寄存器描述字。它们只搬运原始位，绝不进行 IEEE-754 或整数数值转换。`Rhi` 对应 bit 31-16，`Rlo` 对应 bit 15-0。
+
+| selector | 助记符 | 语义 |
+|---:|---|---|
+| `640h` | `IFPUNPACK Rhi, Rlo, FPa` | 将 `FPa` 的高半字写入 `Rhi`，随后将低半字写入 `Rlo`。两目标相同则最终保留低半字。 |
+| `641h` | `IFPGETH Rd, FPa` | 将 `FPa` 的高 16 bit 写入 `Rd`。 |
+| `642h` | `IFPGETL Rd, FPa` | 将 `FPa` 的低 16 bit 写入 `Rd`。 |
+| `643h` | `IFPSETH FPd, Ra` | 用 `Ra` 替换 `FPd` 的高 16 bit，低半字不变。 |
+| `644h` | `IFPSETL FPd, Ra` | 用 `Ra` 替换 `FPd` 的低 16 bit，高半字不变。 |
+| `645h` | `IFPPACK FPd, Rhi, Rlo` | 以 `Rhi` 作为高半字、`Rlo` 作为低半字组成 `FPd`。 |
 
 ## 5. 中断、故障与设备
 

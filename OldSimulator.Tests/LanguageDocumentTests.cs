@@ -47,4 +47,40 @@ public sealed class LanguageDocumentTests
             Assert.DoesNotContain("Open16A instruction.", documentation, StringComparison.Ordinal);
         }
     }
+
+    [Fact]
+    public void ImmediateArithmeticInstructionsHaveCompletionsDocumentationAndFourByteOffsets()
+    {
+        var document = new LanguageDocument(
+            "file:///immediate.o16a",
+            "ADDI R0, R1, 1\nSUBI R0, R1, 1\nMULI R0, R1, 1\nDIVI R0, R1, 1\nDIVUI R0, R1, 1\nnext:\n  HALT\n");
+
+        Assert.Empty(document.Diagnostics);
+        Assert.Equal(new TextRange(new TextPosition(5, 0), new TextPosition(5, 4)), document.Definition("next"));
+        Assert.Contains("00014h", document.Hover("next"));
+
+        foreach (string mnemonic in new[] { "ADDI", "SUBI", "MULI", "DIVI", "DIVUI" })
+        {
+            Assert.Contains(mnemonic, LanguageDocument.Mnemonics);
+            Assert.Contains($"`{mnemonic} Rd, Ra, imm16`", document.Hover(mnemonic));
+        }
+    }
+
+    [Fact]
+    public void IntegerFloatTransferInstructionsHaveCompletionsDocumentationAndFourByteOffsets()
+    {
+        var document = new LanguageDocument(
+            "file:///integer-float-transfer.o16a",
+            "IFPUNPACK R0, R1, FP0\nIFPGETH R0, FP0\nIFPGETL R0, FP0\nIFPSETH FP0, R0\nIFPSETL FP0, R0\nIFPPACK FP0, R0, R1\nnext:\n  HALT\n");
+
+        Assert.Empty(document.Diagnostics);
+        Assert.Equal(new TextRange(new TextPosition(6, 0), new TextPosition(6, 4)), document.Definition("next"));
+        Assert.Contains("00018h", document.Hover("next"));
+
+        foreach (string mnemonic in new[] { "IFPUNPACK", "IFPGETH", "IFPGETL", "IFPSETH", "IFPSETL", "IFPPACK" })
+        {
+            Assert.Contains(mnemonic, LanguageDocument.Mnemonics);
+            Assert.Contains(mnemonic, document.Hover(mnemonic));
+        }
+    }
 }

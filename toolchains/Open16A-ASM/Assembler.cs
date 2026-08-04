@@ -17,6 +17,23 @@ public sealed class AssemblyException : Exception
 
 public sealed class Assembler
 {
+    private const int CompactAddOneSelector = 0x040;
+    private const int CompactSubtractOneSelector = 0x080;
+    private const int CompactLoadOneSelector = 0x0C0;
+    private const int CompactLoadOneAndAddSelector = 0x100;
+    private const int CompactLoadOneAndSubtractSelector = 0x300;
+    private const int ImmediateAddSelector = 0x500;
+    private const int ImmediateSubtractSelector = 0x540;
+    private const int ImmediateMultiplySelector = 0x580;
+    private const int ImmediateDivideSelector = 0x5C0;
+    private const int ImmediateUnsignedDivideSelector = 0x600;
+    private const int IntegerFloatUnpackSelector = 0x640;
+    private const int IntegerFloatGetHighSelector = 0x641;
+    private const int IntegerFloatGetLowSelector = 0x642;
+    private const int IntegerFloatSetHighSelector = 0x643;
+    private const int IntegerFloatSetLowSelector = 0x644;
+    private const int IntegerFloatPackSelector = 0x645;
+
     private readonly Dictionary<string, uint> labels = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> externalSymbols = new(StringComparer.OrdinalIgnoreCase);
     private bool relocatable;
@@ -155,19 +172,20 @@ public sealed class Assembler
             ".BYTE" => operands.Count,
             ".WORD" => checked(operands.Count * 2),
             ".GLOBAL" or ".EXTERN" => 0,
-            "NOP" or "MOV" or "ADD" or "SUB" or "AND" or "OR" or "XOR" or "SHL" or "SHR" or "SAR"
+            "NOP" or "MOV" or "LI1" or "ADD" or "SUB" or "ADD1" or "SUB1" or "AND" or "OR" or "XOR" or "SHL" or "SHR" or "SAR"
                 or "JMP" or "CALL" or "RET" or "PUSH" or "POP" or "RDSG" or "WRSG" or "EI" or "DI"
                 or "HALT" or "IRET" or "RETL" => 2,
             "LI" or "LD.BU" or "LD.W" or "ST.B" or "ST.W" or "BEQ" or "BNE" or "IN" or "OUT" or "WSGI"
                 or "JMPA" or "CALLA" or "MUL" or "DIV" or "DIVU" or "MOD" or "MODU" or "NEG" or "NOT"
-                or "ROL" or "ROR" => 4,
+                or "ROL" or "ROR" or "ADDI" or "SUBI" or "MULI" or "DIVI" or "DIVUI" => 4,
             "BLT" or "BGE" or "BLO" or "BHS" or "BLE" or "BGT" or "JMPL" or "CALLL" => 6,
             "LDBS" or "LDBU" or "LDW" or "LSTB" or "LSTW" => 8,
             "FLI" or "IFPLI" => 8,
             "FLD" or "FST" => 6,
             "FMOV" or "FADD" or "FSUB" or "FMUL" or "FDIV" or "FNEG" or "FABS" or "FCMP"
                 or "IFPADD" or "IFPSUB" or "IFPAND" or "IFPOR" or "IFPXOR" or "IFPNOT"
-                or "IFPSHL" or "IFPSHR" or "IFPSAR" or "IFPROL" or "IFPROR" => 4,
+                or "IFPSHL" or "IFPSHR" or "IFPSAR" or "IFPROL" or "IFPROR"
+                or "IFPUNPACK" or "IFPGETH" or "IFPGETL" or "IFPSETH" or "IFPSETL" or "IFPPACK" => 4,
             _ => throw Error(line, $"Unknown instruction or directive '{mnemonic}'.")
         };
     }
@@ -192,12 +210,20 @@ public sealed class Assembler
             case "NOP": Basic(output, 0); break;
             case "MOV": Basic(output, 1, Rd(op, line), Ra(op, line)); break;
             case "LI": Basic(output, 2, Rd(op, line)); Word(output, WordValue(Value(op, 1, line), line)); break;
+            case "LI1": CompactLoadOne(output, op, line); break;
             case "LD.BU": Memory(output, 3, op, line); break;
             case "LD.W": Memory(output, 4, op, line); break;
             case "ST.B": Memory(output, 5, op, line); break;
             case "ST.W": Memory(output, 6, op, line); break;
             case "ADD": Basic(output, 7, Rd(op, line), Ra(op, line), Rb(op, line)); break;
             case "SUB": Basic(output, 8, Rd(op, line), Ra(op, line), Rb(op, line)); break;
+            case "ADD1": CompactOne(output, CompactAddOneSelector, CompactLoadOneAndAddSelector, op, line); break;
+            case "SUB1": CompactOne(output, CompactSubtractOneSelector, CompactLoadOneAndSubtractSelector, op, line); break;
+            case "ADDI": ImmediateArithmetic(output, ImmediateAddSelector, op, line); break;
+            case "SUBI": ImmediateArithmetic(output, ImmediateSubtractSelector, op, line); break;
+            case "MULI": ImmediateArithmetic(output, ImmediateMultiplySelector, op, line); break;
+            case "DIVI": ImmediateArithmetic(output, ImmediateDivideSelector, op, line); break;
+            case "DIVUI": ImmediateArithmetic(output, ImmediateUnsignedDivideSelector, op, line); break;
             case "AND": Basic(output, 9, Rd(op, line), Ra(op, line), Rb(op, line)); break;
             case "OR": Basic(output, 10, Rd(op, line), Ra(op, line), Rb(op, line)); break;
             case "XOR": Basic(output, 11, Rd(op, line), Ra(op, line), Rb(op, line)); break;
@@ -268,6 +294,12 @@ public sealed class Assembler
             case "IFPROL": FloatingRegisters(output, 40, op, line); break;
             case "IFPROR": FloatingRegisters(output, 41, op, line); break;
             case "IFPLI": FloatingImmediate(output, 42, op, line, false); break;
+            case "IFPUNPACK": IntegerFloatUnpack(output, op, line); break;
+            case "IFPGETH": IntegerFloatGet(output, IntegerFloatGetHighSelector, op, line); break;
+            case "IFPGETL": IntegerFloatGet(output, IntegerFloatGetLowSelector, op, line); break;
+            case "IFPSETH": IntegerFloatSet(output, IntegerFloatSetHighSelector, op, line); break;
+            case "IFPSETL": IntegerFloatSet(output, IntegerFloatSetLowSelector, op, line); break;
+            case "IFPPACK": IntegerFloatPack(output, op, line); break;
             default: throw Error(line, $"Unknown instruction '{mnemonic}'.");
         }
     }
@@ -315,6 +347,34 @@ public sealed class Assembler
         Descriptor(output, Rd(op, line), Ra(op, line), unary ? 0 : Rb(op, line));
     }
 
+    private static void CompactOne(List<byte> output, int selector, int fusedSelector, List<string> op, Line line)
+    {
+        switch (op.Count)
+        {
+            case 2:
+                Extended(output, selector + (Rd(op, line) << 3) + Ra(op, line));
+                return;
+            case 3:
+                Extended(output, fusedSelector + (Rd(op, line) << 6) + (Ra(op, line) << 3) + Rb(op, line));
+                return;
+            default:
+                throw Error(line, "ADD1/SUB1 require Rd, Ra or Rd, Ra, Rb.");
+        }
+    }
+
+    private static void CompactLoadOne(List<byte> output, List<string> op, Line line)
+    {
+        if (op.Count != 1)
+            throw Error(line, "LI1 requires exactly one destination register.");
+        Extended(output, CompactLoadOneSelector + Rd(op, line));
+    }
+
+    private void ImmediateArithmetic(List<byte> output, int selector, List<string> op, Line line)
+    {
+        Extended(output, selector + (Rd(op, line) << 3) + Ra(op, line));
+        Word(output, WordValue(Value(op, 2, line), line));
+    }
+
     private void FloatingImmediate(List<byte> output, int selector, List<string> op, Line line, bool floating)
     {
         Extended(output, selector);
@@ -350,6 +410,30 @@ public sealed class Assembler
     {
         Extended(output, selector);
         Descriptor(output, Rd(op, line), FloatingRegister(Operand(op, 1, line), line), FloatingRegister(Operand(op, 2, line), line));
+    }
+
+    private static void IntegerFloatUnpack(List<byte> output, List<string> op, Line line)
+    {
+        Extended(output, IntegerFloatUnpackSelector);
+        Descriptor(output, Rd(op, line), Ra(op, line), FloatingRegister(Operand(op, 2, line), line));
+    }
+
+    private static void IntegerFloatGet(List<byte> output, int selector, List<string> op, Line line)
+    {
+        Extended(output, selector);
+        Descriptor(output, Rd(op, line), FloatingRegister(Operand(op, 1, line), line), 0);
+    }
+
+    private static void IntegerFloatSet(List<byte> output, int selector, List<string> op, Line line)
+    {
+        Extended(output, selector);
+        Descriptor(output, FloatingRegister(Operand(op, 0, line), line), Register(Operand(op, 1, line), line), 0);
+    }
+
+    private static void IntegerFloatPack(List<byte> output, List<string> op, Line line)
+    {
+        Extended(output, IntegerFloatPackSelector);
+        Descriptor(output, FloatingRegister(Operand(op, 0, line), line), Register(Operand(op, 1, line), line), Register(Operand(op, 2, line), line));
     }
 
     private static void Basic(List<byte> output, int opcode, int rd = 0, int ra = 0, int rb = 0) =>
@@ -395,6 +479,9 @@ public sealed class Assembler
                     break;
                 case "LI" or "IN":
                     AddRelocation(relocations, Operand(operands, 1, line), checked((int)address + 2), RelocationKind.Absolute16, line);
+                    break;
+                case "ADDI" or "SUBI" or "MULI" or "DIVI" or "DIVUI":
+                    AddRelocation(relocations, Operand(operands, 2, line), checked((int)address + 2), RelocationKind.Absolute16, line);
                     break;
                 case "LD.BU" or "LD.W" or "ST.B" or "ST.W":
                     AddMemoryDisplacementRelocation(relocations, Operand(operands, 1, line), checked((int)address + 2), line);

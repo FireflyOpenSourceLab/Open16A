@@ -110,11 +110,16 @@ LD.W R1, [R2 + table - base]
 | `NOP` | 不做任何事。 |
 | `MOV Rd, Ra` | 复制寄存器。 |
 | `LI Rd, imm16` | 装入 16-bit 常量或标签值。 |
+| `LI1 Rd` | 一字装入常数 `1`。 |
 | `ADD/SUB/AND/OR/XOR Rd, Ra, Rb` | 三寄存器算术或位操作。 |
+| `ADDI/SUBI Rd, Ra, imm16` | 立即数加减；结果按 16-bit 环绕。 |
+| `ADD1/SUB1 Rd, Ra` | 一字的加一或减一。 |
+| `ADD1/SUB1 Rd, Ra, Rb` | 紧凑地执行 `LI Rb, 1` 后的 `ADD/SUB`，并保留 `Rb=1` 的写回副作用。 |
 | `SHL/SHR/SAR Rd, Ra, Rb` | 移位；移位量取 `Rb & 0Fh`。 |
 | `PUSH Ra` | 压入一个字。 |
 | `POP Rd` | 弹出一个字。 |
 | `MUL/DIV/DIVU/MOD/MODU Rd, Ra, Rb` | 扩展整数运算。 |
+| `MULI/DIVI/DIVUI Rd, Ra, imm16` | 立即数扩展整数运算；前两者是有符号运算，`DIVUI` 为无符号除法，零除会故障。 |
 | `NEG/NOT Rd, Ra` | 一元二补码取负或按位取反。 |
 | `ROL/ROR Rd, Ra, Rb` | 循环移位。 |
 
@@ -220,9 +225,20 @@ FADD  FP2, FP0, FP1
 FST   FP2, [R0]
 IFPLI FP3, 80000000h
 IFPSAR FP4, FP3, FP5
+IFPUNPACK R0, R1, FP3
+IFPPACK FP6, R0, R1
+IFPSETH FP6, R2
+IFPSETL FP6, R3
 ```
 
-`FLI` 接受 IEEE-754 single 十进制字面量；`IFPLI` 接受 raw 32-bit 位模式。`FLD/FST` 使用 `[Ra + disp16]` 逻辑寻址并读写四字节。`FADD`、`FSUB`、`FMUL`、`FDIV`、`FNEG`、`FABS` 做单精度浮点运算；`IFP...` 指令仅把同一组寄存器当作 32-bit 整数。
+`FLI` 接受 IEEE-754 single 十进制字面量；`IFPLI` 接受 raw 32-bit 位模式。`FLD/FST` 使用 `[Ra + disp16]` 逻辑寻址并读写四字节。`FADD`、`FSUB`、`FMUL`、`FDIV`、`FNEG`、`FABS` 做单精度浮点运算；`IFP...` 指令仅把同一组寄存器当作 32-bit 整数或 raw 位模式。
+
+| 写法 | 说明 |
+|---|---|
+| `IFPUNPACK Rhi, Rlo, FPa` | 将 `FPa` 的高、低 16 bit 依次搬入两个 `R` 寄存器。 |
+| `IFPGETH/IFPGETL Rd, FPa` | 仅搬运 `FPa` 的高或低 16 bit。 |
+| `IFPSETH/IFPSETL FPd, Ra` | 仅替换 `FPd` 的高或低 16 bit。 |
+| `IFPPACK FPd, Rhi, Rlo` | 用两个 `R` 寄存器的高、低半字组成 `FPd`。 |
 
 ## 5. 汇编指令
 

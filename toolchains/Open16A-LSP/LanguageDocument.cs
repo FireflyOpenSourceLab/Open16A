@@ -12,12 +12,13 @@ public sealed class LanguageDocument
 {
     public static readonly string[] Mnemonics =
     [
-        "NOP", "MOV", "LI", "LD.BU", "LD.W", "ST.B", "ST.W", "ADD", "SUB", "AND", "OR", "XOR", "SHL", "SHR", "SAR",
+        "NOP", "MOV", "LI", "LD.BU", "LD.W", "ST.B", "ST.W", "ADD", "SUB", "ADDI", "SUBI", "AND", "OR", "XOR", "SHL", "SHR", "SAR",
         "BEQ", "BNE", "JMP", "CALL", "RET", "PUSH", "POP", "IN", "OUT", "RDSG", "WRSG", "WSGI", "EI", "DI", "HALT", "IRET",
         "BLT", "BGE", "BLO", "BHS", "BLE", "BGT", "JMPA", "CALLA", "JMPL", "CALLL", "RETL", "LDBS", "LDBU", "LDW", "LSTB", "LSTW",
-        "MUL", "DIV", "DIVU", "MOD", "MODU", "NEG", "NOT", "ROL", "ROR"
+        "MUL", "DIV", "DIVU", "MOD", "MODU", "NEG", "NOT", "ROL", "ROR", "MULI", "DIVI", "DIVUI"
         , "FLI", "FMOV", "FLD", "FST", "FADD", "FSUB", "FMUL", "FDIV", "FNEG", "FABS", "FCMP"
         , "IFPLI", "IFPADD", "IFPSUB", "IFPAND", "IFPOR", "IFPXOR", "IFPNOT", "IFPSHL", "IFPSHR", "IFPSAR", "IFPROL", "IFPROR"
+        , "IFPUNPACK", "IFPGETH", "IFPGETL", "IFPSETH", "IFPSETL", "IFPPACK"
     ];
 
     private static readonly IReadOnlyDictionary<string, string> Documentation = Mnemonics.ToDictionary(
@@ -136,14 +137,16 @@ public sealed class LanguageDocument
             ".BYTE" => Math.Max(1, body.Count(character => character == ',') + 1),
             ".WORD" => Math.Max(1, body.Count(character => character == ',') + 1) * 2,
             "LI" or "LD.BU" or "LD.W" or "ST.B" or "ST.W" or "BEQ" or "BNE" or "IN" or "OUT" or "WSGI"
-                or "JMPA" or "CALLA" or "MUL" or "DIV" or "DIVU" or "MOD" or "MODU" or "NEG" or "NOT" or "ROL" or "ROR" => 4,
+                or "JMPA" or "CALLA" or "MUL" or "DIV" or "DIVU" or "MOD" or "MODU" or "NEG" or "NOT" or "ROL" or "ROR"
+                or "ADDI" or "SUBI" or "MULI" or "DIVI" or "DIVUI" => 4,
             "BLT" or "BGE" or "BLO" or "BHS" or "BLE" or "BGT" or "JMPL" or "CALLL" => 6,
             "LDBS" or "LDBU" or "LDW" or "LSTB" or "LSTW" => 8,
             "FLI" or "IFPLI" => 8,
             "FLD" or "FST" => 6,
             "FMOV" or "FADD" or "FSUB" or "FMUL" or "FDIV" or "FNEG" or "FABS" or "FCMP"
                 or "IFPADD" or "IFPSUB" or "IFPAND" or "IFPOR" or "IFPXOR" or "IFPNOT"
-                or "IFPSHL" or "IFPSHR" or "IFPSAR" or "IFPROL" or "IFPROR" => 4,
+                or "IFPSHL" or "IFPSHR" or "IFPSAR" or "IFPROL" or "IFPROR"
+                or "IFPUNPACK" or "IFPGETH" or "IFPGETL" or "IFPSETH" or "IFPSETL" or "IFPPACK" => 4,
             _ => string.IsNullOrEmpty(mnemonic) ? 0 : 2
         };
     }
@@ -159,6 +162,8 @@ public sealed class LanguageDocument
         "ST.W" => "`ST.W Rs, [Ra + disp16]` - Store a 16-bit big-endian word to logical memory.",
         "ADD" => "`ADD Rd, Ra, Rb` - Add two 16-bit values; the low 16 bits are written to `Rd`.",
         "SUB" => "`SUB Rd, Ra, Rb` - Subtract `Rb` from `Ra`; the low 16 bits are written to `Rd`.",
+        "ADDI" => "`ADDI Rd, Ra, imm16` - Add a 16-bit immediate to `Ra`; the low 16 bits are written to `Rd`.",
+        "SUBI" => "`SUBI Rd, Ra, imm16` - Subtract a 16-bit immediate from `Ra`; the low 16 bits are written to `Rd`.",
         "AND" => "`AND Rd, Ra, Rb` - Bitwise AND two 16-bit values.",
         "OR" => "`OR Rd, Ra, Rb` - Bitwise OR two 16-bit values.",
         "XOR" => "`XOR Rd, Ra, Rb` - Bitwise exclusive OR two 16-bit values.",
@@ -200,6 +205,9 @@ public sealed class LanguageDocument
         "MUL" => "`MUL Rd, Ra, Rb` - Signed multiply; write the low 16 bits to `Rd`.",
         "DIV" => "`DIV Rd, Ra, Rb` - Signed division with truncation toward zero; division by zero faults.",
         "DIVU" => "`DIVU Rd, Ra, Rb` - Unsigned division; division by zero faults.",
+        "MULI" => "`MULI Rd, Ra, imm16` - Signed multiply by a 16-bit immediate; write the low 16 bits to `Rd`.",
+        "DIVI" => "`DIVI Rd, Ra, imm16` - Signed division by a 16-bit immediate with truncation toward zero; division by zero faults.",
+        "DIVUI" => "`DIVUI Rd, Ra, imm16` - Unsigned division by a 16-bit immediate; division by zero faults.",
         "MOD" => "`MOD Rd, Ra, Rb` - Signed remainder; division by zero faults.",
         "MODU" => "`MODU Rd, Ra, Rb` - Unsigned remainder; division by zero faults.",
         "NEG" => "`NEG Rd, Ra` - Two's-complement negate `Ra`.",
@@ -218,6 +226,12 @@ public sealed class LanguageDocument
         "FABS" => "`FABS FPd, FPa` - Clear the sign bit of a floating-point value.",
         "FCMP" => "`FCMP Rd, FPa, FPb` - Compare floats and write the Open16A comparison code to `Rd`.",
         "IFPLI" => "`IFPLI FPd, imm32` - Load a raw 32-bit integer-overlay immediate into `FPd`.",
+        "IFPUNPACK" => "`IFPUNPACK Rhi, Rlo, FPa` - Copy raw bits 31-16 then 15-0 from `FPa` into general-purpose registers.",
+        "IFPGETH" => "`IFPGETH Rd, FPa` - Copy raw bits 31-16 from `FPa` into `Rd`.",
+        "IFPGETL" => "`IFPGETL Rd, FPa` - Copy raw bits 15-0 from `FPa` into `Rd`.",
+        "IFPSETH" => "`IFPSETH FPd, Ra` - Replace raw bits 31-16 of `FPd` with `Ra`.",
+        "IFPSETL" => "`IFPSETL FPd, Ra` - Replace raw bits 15-0 of `FPd` with `Ra`.",
+        "IFPPACK" => "`IFPPACK FPd, Rhi, Rlo` - Form `FPd` from high and low raw 16-bit words.",
         "IFPADD" => "`IFPADD FPd, FPa, FPb` - Add raw 32-bit integer-overlay values.",
         "IFPSUB" => "`IFPSUB FPd, FPa, FPb` - Subtract raw 32-bit integer-overlay values.",
         "IFPAND" => "`IFPAND FPd, FPa, FPb` - Bitwise AND raw 32-bit integer-overlay values.",

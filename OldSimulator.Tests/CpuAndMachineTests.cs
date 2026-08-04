@@ -258,6 +258,155 @@ public sealed class CpuAndMachineTests
     }
 
     [Fact]
+    public void ImmediateIntegerOperationsHaveDefinedSignedAndUnsignedSemantics()
+    {
+        var memory = new Memory();
+        var cpu = new Cpu(memory, new IoBus());
+
+        WriteProgram(memory,
+                     Instruction(2, rd: 0), 0xFFFF,
+                     Extended(0x500 + (1 << 3)), 2,          // ADDI R1, R0, 2
+                     Extended(0x540 + (2 << 3) + 1), 3,      // SUBI R2, R1, 3
+                     Instruction(2, rd: 3), 0xFFF9,           // -7
+                     Extended(0x580 + (4 << 3) + 3), 0xFFFD, // MULI R4, R3, -3
+                     Extended(0x5C0 + (5 << 3) + 3), 0xFFFD, // DIVI R5, R3, -3
+                     Instruction(2, rd: 6), 0xFFFF,
+                     Extended(0x600 + (7 << 3) + 6), 0x8000, // DIVUI R7, R6, 8000h
+                     Instruction(29));
+
+        cpu.ExecuteNextInstruction();
+        Assert.Equal((ulong)2, cpu.PeekNextInstructionCost());
+        cpu.ExecuteNextInstruction();
+        Assert.Equal((ulong)2, cpu.PeekNextInstructionCost());
+        cpu.ExecuteNextInstruction();
+        cpu.ExecuteNextInstruction();
+        Assert.Equal((ulong)3, cpu.PeekNextInstructionCost());
+        ExecuteUntilHalted(cpu);
+
+        Assert.Equal((ushort)1, cpu.Registers[1]);
+        Assert.Equal((ushort)0xFFFE, cpu.Registers[2]);
+        Assert.Equal((ushort)21, cpu.Registers[4]);
+        Assert.Equal((ushort)2, cpu.Registers[5]);
+        Assert.Equal((ushort)1, cpu.Registers[7]);
+    }
+
+    [Fact]
+    public void ImmediateDivisionByZeroFaultsTheExtendedInstruction()
+    {
+        var memory = new Memory();
+        var cpu = new Cpu(memory, new IoBus());
+
+        foreach (int selector in new[] { 0x5C0, 0x600 })
+        {
+            cpu.Reset();
+            cpu.Registers[0] = 1;
+            cpu.Registers[2] = 0xCAFE;
+            WriteProgram(memory, Extended(selector + (2 << 3)), 0);
+
+            Assert.Equal((ulong)3, cpu.PeekNextInstructionCost());
+            cpu.ExecuteNextInstruction();
+
+            Assert.Equal(CpuFaultCode.DivisionByZero, cpu.FaultCode);
+            Assert.Equal(Cpu.INITIAL_PROGRAM_COUNTER, cpu.FaultingPc);
+            Assert.Equal((ushort)0xCAFE, cpu.Registers[2]);
+        }
+    }
+
+    [Fact]
+    public void IntegerFloatTransfersMoveRawHalvesBetweenFpAndGeneralPurposeRegisters()
+    {
+        var memory = new Memory();
+        var cpu = new Cpu(memory, new IoBus());
+        cpu.FloatingPointRegisters[0] = 0xDEAD_BEEF;
+        cpu.FloatingPointRegisters[3] = 0x89AB_CDEF;
+
+        WriteProgram(memory,
+                     Extended(0x640), RegisterOperands(rd: 1, ra: 2, rb: 3), // IFPUNPACK R1, R2, FP3
+                     Extended(0x641), RegisterOperands(rd: 4, ra: 3),        // IFPGETH R4, FP3
+                     Extended(0x642), RegisterOperands(rd: 5, ra: 3),        // IFPGETL R5, FP3
+                     Instruction(2, rd: 6), 0x1357,
+                     Instruction(2, rd: 7), 0x2468,
+                     Extended(0x643), RegisterOperands(rd: 0, ra: 6),        // IFPSETH FP0, R6
+                     Extended(0x644), RegisterOperands(rd: 0, ra: 7),        // IFPSETL FP0, R7
+                     Extended(0x645), RegisterOperands(rd: 1, ra: 1, rb: 2), // IFPPACK FP1, R1, R2
+                     Extended(0x640), RegisterOperands(rd: 0, ra: 0, rb: 3), // IFPUNPACK R0, R0, FP3
+                     Instruction(29));
+
+        Assert.Equal((ulong)2, cpu.PeekNextInstructionCost());
+        for (var instruction = 0; instruction < 5; instruction++)
+            cpu.ExecuteNextInstruction();
+        cpu.ExecuteNextInstruction();
+        Assert.Equal(0x1357_BEEFu, cpu.FloatingPointRegisters[0]);
+        cpu.ExecuteNextInstruction();
+        Assert.Equal(0x1357_2468u, cpu.FloatingPointRegisters[0]);
+        ExecuteUntilHalted(cpu);
+
+        Assert.Equal((ushort)0x89AB, cpu.Registers[1]);
+        Assert.Equal((ushort)0xCDEF, cpu.Registers[2]);
+        Assert.Equal((ushort)0x89AB, cpu.Registers[4]);
+        Assert.Equal((ushort)0xCDEF, cpu.Registers[5]);
+        Assert.Equal((ushort)0xCDEF, cpu.Registers[0]);
+        Assert.Equal(0x1357_2468u, cpu.FloatingPointRegisters[0]);
+        Assert.Equal(0x89AB_CDEFu, cpu.FloatingPointRegisters[1]);
+    }
+
+    [Fact]
+    public void CompactAddAndSubtractOneAreSingleWordAndCanPreserveTheLoadedOneRegister()
+    {
+        var memory = new Memory();
+        var cpu = new Cpu(memory, new IoBus());
+
+        WriteProgram(memory,
+                     Instruction(2, rd: 0), 0xFFFF,
+                     Extended(64 + (1 << 3)),                 // ADD1 R1, R0
+                     Extended(768 + (2 << 6) + (1 << 3) + 4), // SUB1 R2, R1, R4
+                     Extended(0x0C0 + 5),                     // LI1 R5
+                     Instruction(29));
+
+        cpu.ExecuteNextInstruction();
+        Assert.Equal((ulong)1, cpu.PeekNextInstructionCost());
+        cpu.ExecuteNextInstruction();
+        Assert.Equal((ulong)2, cpu.PeekNextInstructionCost());
+        ExecuteUntilHalted(cpu);
+
+        Assert.Equal((ushort)0, cpu.Registers[1]);
+        Assert.Equal((ushort)0xFFFF, cpu.Registers[2]);
+        Assert.Equal((ushort)1, cpu.Registers[4]);
+        Assert.Equal((ushort)1, cpu.Registers[5]);
+    }
+
+    [Fact]
+    public void FusedCompactOneOperationsMatchLiOneFollowedByArithmeticForEveryRegisterAlias()
+    {
+        var memory = new Memory();
+        var cpu = new Cpu(memory, new IoBus());
+
+        foreach (bool subtract in new[] { false, true })
+        for (var destination = 0; destination < 8; destination++)
+        for (var source = 0; source < 8; source++)
+        for (var one = 0; one < 8; one++)
+        {
+            cpu.Reset();
+            var expected = new ushort[8];
+            for (var register = 0; register < expected.Length; register++)
+                expected[register] = (ushort)(0x1111 * register + 3);
+            Array.Copy(expected, cpu.Registers, expected.Length);
+
+            expected[one] = 1;
+            expected[destination] = unchecked((ushort)(subtract
+                ? expected[source] - expected[one]
+                : expected[source] + expected[one]));
+            int selector = (subtract ? 0x300 : 0x100) + (destination << 6) + (source << 3) + one;
+            memory.WriteLogicalWord(Cpu.INITIAL_PROGRAM_COUNTER, 0, Extended(selector));
+
+            cpu.ExecuteNextInstruction();
+
+            Assert.Equal(CpuFaultCode.None, cpu.FaultCode);
+            Assert.Equal(expected, cpu.Registers);
+        }
+    }
+
+    [Fact]
     public void DivisionByZeroFaultsTheExtendedInstruction()
     {
         var memory = new Memory();
