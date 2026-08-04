@@ -19,7 +19,8 @@ Open16A BASIC 1.1 是 Microsoft BASIC 风格的 16-bit 整数子集。默认数�
 token 缓冲为 `73C0h-743Fh`，数值变量为 `7440h-74A7h`，GOSUB/FOR 栈为
 `74A8h-74EFh`。这些地址属于 BASIC 1.1 运行时保留区。
 
-REPL 与 PACK 使用同一套大小写不敏感 tokenizer。输入带行号的任意支持语句会按
+REPL 与 PACK 使用同一套大小写不敏感 tokenizer。键盘等待时，当前字符位置会
+显示下划线光标，收到按键后立即擦除而不推进字符位置。输入带行号的任意支持语句会按
 行号插入或替换；只输入行号会删除该行。编辑后立即接受下一行，不重复输出
 `READY.`。直接命令为 `RUN`、`LIST`、`NEW`、`CONT`、`CLS`、`SAVE` 和 `LOAD`；
 `LIST` 从 token 流完整反解关键字、变量、整数、字符串和运算符。

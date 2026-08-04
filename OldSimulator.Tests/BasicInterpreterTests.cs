@@ -15,8 +15,8 @@ public sealed class BasicInterpreterTests
     {
         AssemblyResult image = AssembleInterpreter();
 
-        Assert.True(image.Bytes.Length <= 11_500,
-            $"BASIC 1.1 interpreter is {image.Bytes.Length} bytes; budget is 11500 bytes.");
+        Assert.True(image.Bytes.Length <= 10_000,
+            $"BASIC 1.1 interpreter is {image.Bytes.Length} bytes; budget is 10000 bytes.");
         Assert.True(image.Origin + image.Bytes.Length <= 0x4000,
             "Interpreter must not overlap the B16P program store at 4000h.");
     }
@@ -32,6 +32,19 @@ public sealed class BasicInterpreterTests
         Assert.True(machine.Cpu.Halted);
         Assert.Equal((byte)'B', machine.Memory.ReadPhysical(0x4000));
         Assert.Equal((byte)0x91, machine.Memory.ReadPhysical(0x400E));
+    }
+
+    [Fact]
+    public void ReplDisplaysAnInputCursorWithoutAdvancingTheCharacterPosition()
+    {
+        Machine machine = StartInterpreter();
+        machine.AdvanceCycles(100_000);
+
+        Assert.True(machine.Cpu.Halted);
+        Assert.Equal((ushort)0, machine.Character.X);
+        Assert.Equal((ushort)2, machine.Character.Y);
+        for (uint x = 0; x < 5; x++)
+            Assert.Equal((byte)15, machine.Memory.ReadPhysical(0xF4000u + 22u * 256u + x));
     }
 
     [Fact]
